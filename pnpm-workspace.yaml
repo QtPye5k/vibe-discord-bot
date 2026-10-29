@@ -1,0 +1,8 @@
+packages: []
+allowBuilds:
+  esbuild: true
+  onnxruntime-node: true
+  protobufjs: true
+  sharp: true
+overrides:
+  sharp: 0.35.5

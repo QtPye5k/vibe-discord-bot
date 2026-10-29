@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "profiles": [
+    {
+      "discordUserId": "900000000000000001",
+      "providerIssuedUserId": "verified-player-42",
+      "profile": {
+        "username": "Example player",
+        "data": {
+          "primary": {
+            "season": "Season 1",
+            "rank_name": "Silver",
+            "playtime_hours": 12.5,
+            "total_wins": 12,
+            "total_games": 20
+          },
+          "dynamic": [
+            { "type": 2, "name": "level", "value": 4 },
+            { "type": 1, "name": "class", "value": "Explorer" }
+          ]
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,978 @@
+## 1. Server Administration and Configuration
+
+- Read server name, ID, description, icon, banner, and metadata.
+- Change server names and supported settings.
+- Change server icons, banners, and visual settings.
+- Manage verification levels.
+- Configure server safety settings.
+- Configure system-message settings.
+- Configure notification settings.
+- Change AFK voice channels and timeouts.
+- Configure Community server settings.
+- Manage welcome screens.
+- Manage onboarding prompts and options.
+- Manage incident-response settings.
+- Read server features and boost information.
+- Retrieve member counts and membership information.
+- Retrieve server integration information.
+- Manage server widgets.
+- Retrieve vanity invitation information.
+- Create server templates.
+- Synchronize server templates.
+- Rebuild server layouts using templates.
+- Automatically create channel structures.
+- Automatically create role structures.
+- Back up server configuration information.
+- Restore supported server configurations.
+- Compare server configuration changes.
+- Detect unauthorized administrative changes.
+- Alert administrators about configuration changes.
+- Produce server administration reports.
+- Manage server emojis.
+- Manage server stickers.
+- Execute bulk administrative operations.
+
+## 2. Channel, Category, Forum, and Thread Management
+
+- Create text channels.
+- Create voice channels.
+- Create Stage channels.
+- Create announcement channels.
+- Create forum channels.
+- Create media channels.
+- Create channel categories.
+- Delete channels.
+- Rename channels.
+- Change channel topics.
+- Edit channel descriptions.
+- Edit channel metadata.
+- Reorder channels.
+- Reorder categories.
+- Move channels between categories.
+- Set channel age restrictions.
+- Configure channel slowmode.
+- Configure channel permission overwrites.
+- Create private channels.
+- Lock channels.
+- Unlock channels.
+- Create temporary channels.
+- Automatically delete temporary channels.
+- Create temporary private voice rooms.
+- Create public threads.
+- Create private threads.
+- Create threads from existing messages.
+- Create forum posts.
+- Create media posts.
+- Apply forum tags.
+- Edit forum tags.
+- Edit forum post settings.
+- Archive threads.
+- Unarchive threads.
+- Lock threads.
+- Unlock threads.
+- Join threads.
+- Leave threads.
+- Add thread participants.
+- Remove thread participants.
+- Retrieve active threads.
+- Retrieve archived threads.
+- Manage voice-channel statuses.
+- Configure channel-specific automation.
+- Create support channels on demand.
+- Automatically organize discussions into threads.
+- Follow announcement channels.
+
+## 3. Role Management and Permissions
+
+- Create roles.
+- Delete roles.
+- Rename roles.
+- Change role colors.
+- Configure enhanced role colors.
+- Change role icons.
+- Reorder roles.
+- Change role permissions.
+- Assign roles to members.
+- Remove roles from members.
+- Assign multiple roles automatically.
+- Automatically assign newcomer roles.
+- Assign roles through button interactions.
+- Assign roles through selection menus.
+- Assign roles after verification.
+- Assign roles based on activity.
+- Assign roles based on experience levels.
+- Assign temporary roles.
+- Automatically expire temporary roles.
+- Restore saved role assignments when members rejoin.
+- Assign achievement roles.
+- Assign reward roles.
+- Assign subscription-based roles.
+- Assign entitlement-based roles.
+- Implement role-based access control.
+- Calculate member permissions.
+- Display member permissions.
+- Compare permissions across channels.
+- Detect dangerous permission combinations.
+- Alert administrators about privileged role changes.
+- Configure Linked Roles metadata.
+- Manage role-based command access.
+
+## 4. Member Management and Moderation
+
+- Welcome new members.
+- Send customized welcome messages.
+- Send onboarding direct messages.
+- Assign newcomer roles.
+- Detect member departures.
+- Log member joins.
+- Log member leaves.
+- Track server join dates.
+- Change member nicknames.
+- Reset member nicknames.
+- Kick members.
+- Ban members.
+- Unban members.
+- Bulk-ban eligible accounts.
+- Remove recent message history when banning.
+- Apply communication timeouts.
+- Remove communication timeouts.
+- Automatically expire bot-managed punishments.
+- Server-mute members in voice channels.
+- Server-deafen members in voice channels.
+- Move members between voice channels.
+- Disconnect members from voice channels.
+- Warn members.
+- Maintain warning histories.
+- Maintain moderation case records.
+- Automatically escalate penalties.
+- Send customized violation notices.
+- Create moderation appeal workflows.
+- Allow moderators to approve appeals.
+- Allow moderators to deny appeals.
+- Log deleted messages observed by the bot.
+- Log edited messages observed by the bot.
+- Track role changes.
+- Track nickname changes.
+- Track moderation events.
+- Retrieve server audit logs.
+- Identify administrators responsible for audited actions.
+- Export moderation logs.
+- Generate moderator activity reports.
+- Identify inactive members using available activity data.
+- Prune inactive members.
+- Create automated moderation queues.
+- Create user-reporting systems.
+- Assign reports to moderators.
+- Maintain moderation case notes.
+- Send urgent staff alerts.
+- Implement configurable moderation policies.
+
+## 5. Security, AutoMod, and Anti-Raid Protection
+
+- Detect rapid member-join spikes.
+- Detect repeated identical messages.
+- Detect excessive mentions.
+- Detect mass pinging.
+- Detect suspicious link patterns.
+- Detect phishing URLs.
+- Check links using external reputation services.
+- Detect known scam domains.
+- Identify suspicious attachment types.
+- Integrate external malware-scanning services.
+- Detect repeated message flooding.
+- Detect excessive emoji spam.
+- Detect excessive capitalization.
+- Filter configured keywords.
+- Filter regular-expression patterns.
+- Configure native Discord AutoMod rules.
+- Enable AutoMod rules.
+- Disable AutoMod rules.
+- Change AutoMod exemptions.
+- Block messages matching AutoMod criteria.
+- Send AutoMod alerts.
+- Apply native AutoMod timeout actions.
+- Build custom anti-spam scoring systems.
+- Detect suspicious mass-channel deletions.
+- Detect suspicious mass-role modifications.
+- Alert administrators about webhook changes.
+- Restrict server access during raids.
+- Activate emergency server lockdowns.
+- Restore saved permissions after lockdowns.
+- Track previous moderation violations.
+- Implement configurable moderation trust scores.
+- Request human review of suspicious activity.
+- Integrate CAPTCHA verification.
+- Integrate external website verification.
+- Integrate OAuth-based verification.
+- Detect malicious URLs through security APIs.
+- Maintain allowlists.
+- Maintain blocklists.
+- Require human approval before destructive actions.
+
+## 6. Messaging, Attachments, and Chat Control
+
+- Send plain-text messages.
+- Send Markdown-formatted messages.
+- Send code blocks.
+- Send hyperlinks.
+- Send messages containing mentions.
+- Send messages containing custom emojis.
+- Send server stickers.
+- Send image attachments.
+- Send GIFs.
+- Send video attachments.
+- Send audio files.
+- Send PDF files.
+- Send ZIP files.
+- Send other permitted file attachments.
+- Send rich embedded messages.
+- Send graphical reports.
+- Send polls.
+- End polls.
+- Retrieve poll results.
+- Retrieve available poll voting information.
+- Reply to messages.
+- Forward supported messages.
+- Edit the bot's own messages.
+- Delete the bot's own messages.
+- Delete other users' messages with authorization.
+- Bulk-delete eligible recent messages.
+- Pin messages.
+- Unpin messages.
+- Retrieve pinned messages.
+- Add message reactions.
+- Remove the bot's reactions.
+- Remove other reactions with authorization.
+- Clear reactions from messages.
+- Show typing indicators.
+- Send text-to-speech messages.
+- Send messages without normal push notifications.
+- Send messages with suppressed embeds.
+- Crosspost announcement-channel messages.
+- Send webhook-based announcements.
+- Relay messages between authorized channels.
+- Automatically translate messages.
+- Summarize discussions.
+- Automatically format text.
+- Convert uploaded media between formats.
+- Create automatic FAQ responses.
+- Schedule messages.
+- Automatically update status panels.
+- Send personalized event-based messages.
+- Read accessible message history.
+- Search accessible message history.
+- Monitor replies.
+- Monitor reactions.
+- Respond to keywords.
+- Respond to bot mentions.
+- Continue conversations without repeated mentions.
+- Maintain conversational context across messages.
+
+## 7. Commands and Interaction Methods
+
+- Create slash commands.
+- Create slash subcommands.
+- Create slash command groups.
+- Create user context-menu commands.
+- Create message context-menu commands.
+- Create Activity launch commands.
+- Create prefix commands.
+- Create mention-triggered commands.
+- Create natural-language commands.
+- Create AI-interpreted commands.
+- Create commands with text arguments.
+- Create commands with numerical arguments.
+- Create commands with Boolean arguments.
+- Create commands targeting users.
+- Create commands targeting channels.
+- Create commands targeting roles.
+- Create commands accepting file attachments.
+- Provide command autocomplete suggestions.
+- Restrict commands to specific roles.
+- Restrict commands to specific channels.
+- Create server-specific commands.
+- Create global commands.
+- Create commands usable in direct messages.
+- Create user-installable commands.
+- Localize command names.
+- Localize command descriptions.
+- Send private interaction responses.
+- Defer responses for long-running operations.
+- Send interactive follow-up messages.
+- Create interactive approval workflows.
+- Create interactive confirmation workflows.
+
+## 8. Interactive Interfaces, Forms, and UI Components
+
+- Create interactive buttons.
+- Create link buttons.
+- Create premium purchase buttons.
+- Create string-selection dropdown menus.
+- Create user-selection dropdown menus.
+- Create role-selection dropdown menus.
+- Create channel-selection dropdown menus.
+- Create mentionable-selection dropdown menus.
+- Create modal popup forms.
+- Create text-input fields.
+- Create file-upload fields in modals.
+- Create radio-button groups.
+- Create checkbox groups.
+- Create individual checkboxes.
+- Create input labels.
+- Create styled message containers.
+- Create text-display components.
+- Create text-and-accessory sections.
+- Display embedded thumbnails.
+- Display media galleries.
+- Display file components.
+- Create layout separators.
+- Build multi-step forms.
+- Build confirmation dialogs.
+- Create interactive settings menus.
+- Create interactive moderation dashboards.
+- Create ticket-creation panels.
+- Create role-selection panels.
+- Create application forms.
+- Create recruitment forms.
+- Create interactive quizzes.
+- Create answer-submission forms.
+- Create custom surveys.
+- Create interactive game interfaces.
+- Create interactive pagination systems.
+- Create interactive search-result interfaces.
+- Create interactive help menus.
+
+## 9. Voice Channels, Audio, Speech, and Soundboards
+
+- Join voice channels.
+- Leave voice channels.
+- Move between voice channels.
+- Play supported audio streams.
+- Play locally stored audio files.
+- Queue multiple audio tracks.
+- Pause audio playback.
+- Resume audio playback.
+- Skip audio tracks.
+- Stop audio playback.
+- Maintain music queues across servers.
+- Create music playlists.
+- Adjust audio playback volume.
+- Play sound effects.
+- Trigger supported Discord soundboard sounds.
+- Retrieve available soundboard sounds.
+- Create server soundboard sounds.
+- Edit server soundboard sounds.
+- Delete server soundboard sounds.
+- Detect users joining voice channels.
+- Detect users leaving voice channels.
+- Detect voice mute changes.
+- Detect voice deafen changes.
+- Detect supported streaming-state changes.
+- Detect supported camera-state changes.
+- Move users between voice channels.
+- Manage temporary voice channels.
+- Automatically create voice rooms.
+- Automatically delete unused voice rooms.
+- Interpret voice commands using speech recognition.
+- Receive and process voice audio through compatible implementations.
+- Transcribe consented voice conversations.
+- Generate spoken responses using text-to-speech.
+- Build conversational voice AI.
+- Translate spoken languages.
+- Produce voice meeting summaries.
+- Implement voice activity detection.
+- Run voice-based games.
+- Run audio trivia games.
+- Generate voice attendance reports.
+- Stream authorized audio sources.
+- Create audio-based alerts.
+- Process audio using compression and equalization.
+- Apply audio effects.
+- Build consent-based voice recording systems.
+
+## 10. Events, Scheduling, Reminders, and Automation
+
+- Create Discord scheduled events.
+- Edit scheduled events.
+- Cancel scheduled events.
+- Retrieve event information.
+- Track interested event participants.
+- Send event reminders.
+- Schedule recurring reminders.
+- Create scheduled announcements.
+- Announce birthdays.
+- Announce anniversaries.
+- Maintain event calendars.
+- Synchronize external calendars.
+- Create RSVP systems.
+- Track event attendance.
+- Create event waitlists.
+- Automatically open event channels.
+- Automatically close event channels.
+- Assign temporary event roles.
+- Organize tournaments.
+- Announce tournament schedules.
+- Manage Stage instances.
+- Manage Stage topics.
+- Provide event countdowns.
+- Send post-event summaries.
+- Run timed giveaways.
+- Run timed polls.
+- Trigger actions at specific times.
+- Execute daily maintenance jobs.
+- Execute weekly maintenance jobs.
+- Execute monthly maintenance jobs.
+- Use cron-style scheduling.
+- Monitor externally scheduled events.
+- Send alerts when configured conditions are met.
+
+## 11. Artificial Intelligence and Natural-Language Capabilities
+
+- Hold natural-language conversations.
+- Understand user instructions.
+- Maintain short-term conversation context.
+- Store long-term conversational memory.
+- Remember saved user preferences.
+- Maintain separate memory for individual users.
+- Maintain separate memory for individual servers.
+- Summarize conversations.
+- Answer questions using accessible message history.
+- Answer questions using external documents.
+- Search the web through external search services.
+- Retrieve current information through connected APIs.
+- Explain programming concepts.
+- Generate programming code.
+- Debug code.
+- Review code.
+- Explain error messages.
+- Analyze server logs.
+- Generate essays.
+- Generate stories.
+- Generate descriptions.
+- Rewrite text.
+- Improve grammar and wording.
+- Translate between languages.
+- Summarize articles.
+- Summarize PDFs.
+- Interpret uploaded images.
+- Analyze charts.
+- Analyze diagrams.
+- Perform mathematical calculations.
+- Create structured plans.
+- Generate quizzes.
+- Generate practice questions.
+- Provide personalized tutoring.
+- Generate AI images.
+- Edit images using AI.
+- Generate speech.
+- Convert speech to text.
+- Process videos using external services.
+- Generate videos using external services.
+- Search connected knowledge bases.
+- Use retrieval-augmented generation.
+- Store vector embeddings.
+- Search vector embeddings.
+- Generate reports using database information.
+- Classify messages.
+- Suggest moderation actions.
+- Analyze suspicious content.
+- Generate moderation summaries.
+- Identify common support issues.
+- Automatically categorize support tickets.
+- Interpret natural-language administration requests.
+- Convert authorized instructions into Discord actions.
+- Generate multi-step action plans.
+- Ask follow-up questions for ambiguous instructions.
+- Execute authorized tools through an AI-agent framework.
+- Use multiple specialized AI models.
+- Route tasks to different AI models.
+- Explain completed actions.
+- Maintain user-specific AI permissions.
+- Maintain administrator-specific AI permissions.
+- Execute approved multi-step workflows.
+- Coordinate multiple AI tools within one conversation.
+
+## 12. Images, GIFs, Videos, Documents, and Media Processing
+
+- Find images using search APIs.
+- Search GIF providers.
+- Send discovered GIFs.
+- Generate AI images.
+- Edit uploaded images.
+- Resize images.
+- Crop images.
+- Rotate images.
+- Apply image filters.
+- Remove image backgrounds.
+- Create transparent PNGs.
+- Generate memes.
+- Create profile-picture concepts.
+- Create banners.
+- Generate thumbnails.
+- Create personalized welcome cards.
+- Generate rank cards.
+- Create charts.
+- Create graphs.
+- Generate server statistics images.
+- Generate PDF reports.
+- Generate CSV exports.
+- Generate spreadsheets.
+- Generate Word documents.
+- Generate presentation files.
+- Read uploaded documents.
+- Extract text from images.
+- Analyze PDFs.
+- Combine PDFs.
+- Split PDFs.
+- Convert files between formats.
+- Compress image files.
+- Compress video files.
+- Extract audio from videos.
+- Convert audio formats.
+- Trim audio files.
+- Trim video files.
+- Create subtitle files.
+- Transcribe recordings.
+- Generate video clips.
+- Generate animated graphics.
+- Create custom emojis from images.
+- Prepare sticker files.
+- Prepare soundboard files.
+- Detect duplicate media using hashes.
+- Analyze uploaded files.
+- Upload processed files into Discord.
+
+## 13. Games, Entertainment, and Virtual Economies
+
+- Run trivia games.
+- Run quizzes.
+- Play word games.
+- Run guessing games.
+- Create text adventures.
+- Run roleplaying games.
+- Create AI-powered story games.
+- Create turn-based games.
+- Create collaborative puzzles.
+- Run virtual pet systems.
+- Create collectible-card systems.
+- Create fictional currencies.
+- Maintain virtual currency balances.
+- Award fictional coins for participation.
+- Create inventories.
+- Run virtual item shops.
+- Manage virtual item purchases.
+- Implement virtual item trading.
+- Maintain experience points.
+- Implement leveling systems.
+- Award achievement badges.
+- Manage leaderboards.
+- Run daily-reward systems.
+- Run streak-reward systems.
+- Create fictional jobs.
+- Create progression systems.
+- Manage crafting systems.
+- Create character profiles.
+- Run boss battles.
+- Run competitions.
+- Track match results.
+- Manage tournaments.
+- Create team assignments.
+- Generate randomized teams.
+- Track wins.
+- Track losses.
+- Organize giveaways.
+- Select giveaway winners.
+- Verify giveaway eligibility.
+- Manage permitted raffles.
+- Integrate external gaming statistics APIs.
+- Track game server status.
+- Display gaming leaderboards.
+- Announce game server maintenance.
+- Track in-game achievements through supported integrations.
+
+## 14. Community Management, Support, and Engagement
+
+- Run automatic welcome systems.
+- Build verification workflows.
+- Maintain server rules displays.
+- Create FAQ systems.
+- Create knowledge-base search systems.
+- Set up support-ticket panels.
+- Create private ticket channels.
+- Create ticket threads.
+- Assign tickets to staff members.
+- Transfer tickets between staff members.
+- Prioritize support tickets.
+- Tag tickets.
+- Categorize tickets.
+- Close tickets.
+- Archive tickets.
+- Generate ticket transcripts.
+- Collect community feedback.
+- Run satisfaction surveys.
+- Create suggestion systems.
+- Accept anonymous submissions through controlled interfaces.
+- Enable suggestion voting.
+- Track suggestion statuses.
+- Publish community announcements.
+- Run application forms.
+- Run recruitment forms.
+- Automatically process application submissions.
+- Escalate applications for human review.
+- Schedule interviews through calendar integrations.
+- Create club enrollment systems.
+- Create group enrollment systems.
+- Run membership waiting lists.
+- Create question-of-the-day posts.
+- Create community polls.
+- Send opt-in reminders.
+- Run event signups.
+- Manage team registration.
+- Provide multilingual support responses.
+- Create notification roles.
+- Manage community rewards.
+- Announce community milestones.
+- Coordinate volunteer assignments.
+- Coordinate staff assignments.
+
+## 15. Statistics, Tracking, Analytics, and Reporting
+
+- Track member joins.
+- Track member departures.
+- Measure membership changes.
+- Track available message counts.
+- Count command usage.
+- Measure command response times.
+- Track bot uptime.
+- Track API errors.
+- Monitor system resource usage.
+- Track voice-channel usage metadata.
+- Track event participation.
+- Track moderation actions.
+- Track ticket resolution times.
+- Track support ticket volumes.
+- Track channel activity.
+- Track command popularity.
+- Track giveaway participation.
+- Track available reaction statistics.
+- Track poll statistics.
+- Generate server activity charts.
+- Create leaderboards.
+- Detect activity spikes.
+- Calculate configurable activity scores.
+- Store historical analytics in databases.
+- Compare weekly statistics.
+- Compare monthly statistics.
+- Build web-based analytics dashboards.
+- Export data to CSV files.
+- Export data to spreadsheets.
+- Generate scheduled reports.
+- Send administrator summaries.
+- Track external website statistics.
+- Track external gaming statistics.
+- Track connected service availability.
+
+## 16. Third-Party Integrations and External Automation
+
+- Connect to GitHub.
+- Retrieve repository commits.
+- Monitor repository releases.
+- Post pull-request notifications.
+- Report CI/CD build results.
+- Connect to GitLab.
+- Connect to development tools.
+- Connect to Google Calendar.
+- Connect to Google Sheets.
+- Connect to Google Drive.
+- Integrate with email services.
+- Connect to project-management software.
+- Integrate with task-tracking systems.
+- Connect to Trello.
+- Connect to Notion.
+- Receive RSS feeds.
+- Monitor website changes.
+- Query external databases.
+- Query REST APIs.
+- Query GraphQL APIs.
+- Send HTTP requests to authorized services.
+- Create webhooks.
+- Receive webhooks.
+- Integrate cloud storage services.
+- Monitor website uptime.
+- Monitor game servers.
+- Monitor authorized home servers.
+- Monitor computer telemetry.
+- Monitor server telemetry.
+- Receive cybersecurity alerts.
+- Send deployment notifications.
+- Query weather APIs.
+- Query currency APIs.
+- Query financial information APIs.
+- Query product availability APIs.
+- Monitor product stock.
+- Monitor product prices.
+- Monitor supported social-media services.
+- Retrieve YouTube channel data.
+- Retrieve Twitch channel data.
+- Announce livestreams.
+- Announce newly uploaded videos.
+- Query gaming statistics.
+- Query game achievements.
+- Monitor supported package delivery services.
+- Send SMS notifications through external providers.
+- Send emails through external providers.
+- Use databases for long-term memory.
+- Execute approved commands on the hosting machine.
+- Control authorized local applications.
+- Run scheduled scripts.
+- Start approved local services.
+- Stop approved local services.
+- Restart the bot through a process supervisor.
+- Manage authorized cloud infrastructure.
+- Run remote administration workflows on authorized systems.
+
+## 17. Bot Identity, Profiles, DMs, OAuth2, and Account Linking
+
+- Change the bot's username.
+- Change the bot's global avatar.
+- Change supported bot profile details.
+- Change bot nicknames in individual servers.
+- Configure supported per-server bot profiles.
+- Set online presence.
+- Set idle presence.
+- Set do-not-disturb presence.
+- Set invisible presence.
+- Display supported game activity.
+- Display supported watching activity.
+- Open DM conversations with eligible users.
+- Respond to direct messages.
+- Create personalized DM workflows.
+- Let users opt into notifications.
+- Send permitted DM reminders.
+- Use OAuth2 authorization.
+- Retrieve authorized user identity information.
+- Retrieve account information within granted scopes.
+- Link Discord identities to external accounts.
+- Verify external account ownership.
+- Support Discord Linked Roles.
+- Authorize external dashboards with Discord login.
+- Require specific roles for dashboard actions.
+- Generate server invitation links.
+- Configure invitation expiration.
+- Configure invitation usage limits.
+- Retrieve manageable invitations.
+- Revoke manageable invitations.
+- Track available invitation activity.
+- Support explicit OAuth2 account-joining flows.
+- Support user-installed applications.
+- Provide user-installed commands in supported group-chat contexts.
+
+## 18. Webhooks, Gateway Events, and Automation Triggers
+
+- Create channel webhooks.
+- Edit webhooks.
+- Delete webhooks.
+- Send webhook messages.
+- Customize webhook display names.
+- Customize webhook avatars.
+- Receive external events through HTTP servers.
+- Handle Discord outgoing webhook events.
+- Validate signed event requests.
+- React to new messages.
+- React to message edits.
+- React to message deletions.
+- React to reaction additions.
+- React to reaction removals.
+- React to member joins.
+- React to member departures.
+- React to role changes.
+- React to channel changes.
+- React to thread changes.
+- React to scheduled-event changes.
+- React to poll events.
+- React to voice-state changes.
+- React to authorized presence changes.
+- React to entitlement events.
+- React to subscription events.
+- Trigger multiple workflows from one event.
+- Queue tasks for later processing.
+- Retry failed operations.
+- Maintain event logs.
+- Detect duplicate events.
+- Prevent duplicate actions.
+- Connect Discord events to external automation systems.
+- Build automated approval chains.
+- Create event-driven notifications.
+- Create event-driven dashboards.
+
+## 19. Discord Activities, Games, and Advanced Application Experiences
+
+- Launch embedded Activities.
+- Create multiplayer games with graphical interfaces.
+- Create collaborative whiteboards.
+- Build interactive learning environments.
+- Create multiplayer quizzes.
+- Create visual puzzle games.
+- Build collaborative productivity tools.
+- Share application state between Activity participants.
+- Create real-time multiplayer experiences.
+- Use Activity launch commands.
+- Integrate Activity participation with databases.
+- Build interactive maps.
+- Build interactive simulations.
+- Create graphical dashboards.
+- Develop real-time collaborative editors.
+- Integrate authorized Discord identity into Activities.
+- Integrate Discord context into Activities.
+- Use the Discord Embedded App SDK.
+- Build companion applications for supported games.
+- Integrate supported game presence features.
+- Support game invites through gaming integrations.
+- Support game lobbies through gaming integrations.
+- Display game statistics.
+- Build Game Stats Widgets.
+- Integrate game authentication.
+- Integrate game-related social experiences.
+
+## 20. Monetization, App Distribution, and Premium Features
+
+- Offer user subscriptions.
+- Offer server-wide subscriptions.
+- Sell eligible permanent one-time unlocks.
+- Sell eligible consumable digital items.
+- Create product SKUs.
+- Query available SKUs.
+- Check premium entitlements.
+- Handle entitlement creation events.
+- Handle entitlement removal events.
+- Restrict features to premium members.
+- Offer subscription-based command limits.
+- Unlock premium themes.
+- Unlock premium interfaces.
+- Offer additional AI usage through premium plans.
+- Build premium membership systems.
+- Handle subscription lifecycle events.
+- Display premium purchase opportunities.
+- Create an application Store page.
+- Publish application information in supported discovery surfaces.
+- Offer free functionality.
+- Offer premium functionality.
+- Track premium feature usage.
+- Generate subscription analytics.
+- Manage supported pricing and offerings.
+- Provide account support workflows.
+- Provide billing support workflows.
+
+## 21. Developer Tools, Hosting, Scalability, and Operations
+
+- Run continuously on a computer.
+- Run continuously on a server.
+- Host on VPS platforms.
+- Host on cloud platforms.
+- Deploy using Docker containers.
+- Run on Linux.
+- Run on Windows.
+- Build bots with Python.
+- Build bots with JavaScript.
+- Build bots with TypeScript.
+- Build bots with Rust.
+- Build bots with Go.
+- Build bots with Java.
+- Build bots with C#.
+- Build bots with other compatible languages.
+- Use Discord's REST API.
+- Use Discord's Gateway WebSocket.
+- Use HTTP interaction endpoints.
+- Support multiple servers from one application.
+- Organize features into modules.
+- Organize features into plugins.
+- Independently enable features.
+- Independently disable features.
+- Store server-specific configurations.
+- Store user-specific configurations.
+- Maintain multiple databases.
+- Support SQL databases.
+- Support Redis caching.
+- Support vector databases.
+- Use job queues.
+- Use background workers.
+- Cache frequently accessed resources.
+- Run multiple tasks concurrently.
+- Use asynchronous programming.
+- Scale across multiple CPU cores.
+- Scale across multiple machines.
+- Shard bots across Gateway connections.
+- Automatically restart after crashes.
+- Create structured diagnostic logs.
+- Measure memory consumption.
+- Measure CPU consumption.
+- Monitor API latency.
+- Track failed requests.
+- Handle Discord API rate limits.
+- Rotate credentials securely.
+- Run automated tests.
+- Deploy software updates.
+- Roll back failed deployments.
+- Monitor bot downtime.
+- Monitor bot uptime.
+- Implement database backups.
+- Provide external control dashboards.
+- Support live configuration changes.
+- Audit sensitive administrative operations.
+
+---
+
+# 22. Unified All-in-One Bot Capabilities
+
+A single Discord bot application can combine and simultaneously operate:
+
+- Server administration.
+- Role management.
+- Channel management.
+- Member management.
+- Moderation systems.
+- Security and anti-raid protection.
+- Messaging and chat automation.
+- Slash commands.
+- Mention-based commands.
+- Natural-language commands.
+- Interactive menus and forms.
+- Voice and audio systems.
+- Music playback.
+- Speech recognition.
+- Text-to-speech.
+- Conversational voice AI.
+- Scheduled events.
+- Reminders and timed automation.
+- AI-powered conversations.
+- Short-term conversational memory.
+- Long-term conversational memory.
+- Web research through external services.
+- AI image generation.
+- Image editing.
+- Video processing.
+- File conversion.
+- Document generation.
+- Document analysis.
+- Games and entertainment.
+- Virtual economies.
+- Experience and leveling systems.
+- Community engagement.
+- Support-ticket management.
+- Server analytics.
+- Data reporting.
+- Third-party service integrations.
+- External application automation.
+- OAuth2 and account linking.
+- Webhook processing.
+- Gateway event handling.
+- Discord Activities.
+- Embedded graphical applications.
+- Premium features.
+- Monetization systems.
+- External web dashboards.
+- Database storage.
+- Scheduled background jobs.
+- Multiple concurrently running feature modules.
+- Multi-server operation.
+- Automated infrastructure monitoring.

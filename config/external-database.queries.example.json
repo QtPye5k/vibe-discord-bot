@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "queries": [
+    {
+      "id": "public-player-stats",
+      "description": "Read one player from an operator-created public statistics view.",
+      "sql": "SELECT player_id, display_name, score FROM bot_public_player_stats WHERE player_id = $1",
+      "parameters": [{ "type": "string", "maxLength": 100 }],
+      "rowLimit": 1,
+      "roleIds": []
+    }
+  ]
+}

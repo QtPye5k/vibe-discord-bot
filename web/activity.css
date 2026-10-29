@@ -1,0 +1,358 @@
+:root {
+  color-scheme: dark;
+  --background: #0e1512;
+  --panel: #18231e;
+  --foreground: #edf4ef;
+  --muted: #9cb1a3;
+  --accent: #b4f39a;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: var(--background);
+  color: var(--foreground);
+}
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+button {
+  cursor: pointer;
+  border: 1px solid #365443;
+  background: #21392b;
+  color: var(--foreground);
+  border-radius: 9px;
+  padding: 0.65rem 0.9rem;
+}
+button:hover:not(:disabled),
+button.active {
+  background: var(--accent);
+  color: #10220f;
+}
+button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+}
+input,
+select,
+textarea {
+  background: #101b15;
+  color: var(--foreground);
+  border: 1px solid #45634f;
+  border-radius: 8px;
+  padding: 0.65rem;
+  max-width: 100%;
+}
+textarea {
+  width: 100%;
+  resize: vertical;
+  line-height: 1.6;
+}
+p {
+  line-height: 1.6;
+  color: var(--muted);
+}
+h1,
+h2,
+h3 {
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+h1 {
+  margin: 0.5rem 0;
+  font-size: clamp(1.5rem, 3vw, 2.3rem);
+}
+h2 {
+  font-size: 1.2rem;
+}
+h3 {
+  font-size: 1rem;
+}
+.shell {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  min-height: 100vh;
+}
+.sidebar {
+  min-width: 0;
+  background: #111e16;
+  border-right: 1px solid #253c2c;
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.wordmark {
+  font-size: 0.9rem;
+  font-weight: 750;
+  letter-spacing: 0.15em;
+  color: var(--accent);
+}
+.subtitle {
+  font-size: 0.8rem;
+}
+.sidebar nav {
+  display: grid;
+  gap: 0.4rem;
+}
+.sidebar nav button {
+  text-align: left;
+  background: transparent;
+  border-color: transparent;
+}
+.sidebar nav button.active {
+  background: #2e4430;
+  color: var(--accent);
+}
+.connected {
+  margin-top: auto;
+  border-top: 1px solid #2e4430;
+  padding-top: 1rem;
+}
+.connected h2 {
+  font-size: 0.85rem;
+}
+.connected p {
+  margin: 0.4rem 0;
+  font-size: 0.8rem;
+}
+main {
+  min-width: 0;
+  width: 100%;
+  max-width: 1400px;
+  padding: 2rem clamp(1rem, 4vw, 3.5rem);
+}
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding-bottom: 1.5rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid #2a4232;
+}
+.eyebrow {
+  color: var(--accent);
+  font-size: 0.7rem;
+  font-weight: 650;
+  letter-spacing: 0.14em;
+}
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: center;
+}
+.card {
+  border: 1px solid #2e4936;
+  border-radius: 16px;
+  background: var(--panel);
+  padding: 1.4rem;
+  min-width: 0;
+}
+.card h2 {
+  margin-top: 0;
+}
+.two-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.2rem;
+}
+.tic-board,
+.puzzle-board {
+  display: grid;
+  gap: 0.5rem;
+  margin: 1.5rem 0;
+  max-width: 380px;
+  aspect-ratio: 1;
+}
+.tic-board {
+  grid-template-columns: repeat(3, 1fr);
+}
+.puzzle-board {
+  grid-template-columns: repeat(4, 1fr);
+}
+.tic-board button {
+  font-size: 3rem;
+  padding: 0;
+}
+.puzzle-board button {
+  font-size: 1.5rem;
+}
+.drawing {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 5/3;
+  margin-top: 1rem;
+  background: #0a1610;
+  border: 1px solid #355840;
+  border-radius: 10px;
+  touch-action: none;
+}
+.notice {
+  padding: 1rem;
+  background: #203a26;
+  border: 1px solid #4b6e47;
+  border-radius: 9px;
+}
+.notice.error {
+  background: #402c24;
+  border-color: #9e674e;
+  color: #ffe0cb;
+}
+.choices {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.8rem;
+  margin: 1.5rem 0;
+}
+.choices button {
+  padding: 1.2rem;
+  text-align: left;
+}
+.choices button.correct {
+  background: var(--accent);
+  color: #10220f;
+  opacity: 1;
+}
+.lesson {
+  border-left: 3px solid var(--accent);
+  padding: 1rem;
+  background: #21382a;
+}
+.kanban {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  margin-top: 1.2rem;
+}
+.kanban > section {
+  padding: 0.8rem;
+  background: #101b15;
+  border-radius: 10px;
+  min-width: 0;
+}
+.task {
+  padding: 0.8rem;
+  border: 1px solid #38523e;
+  border-radius: 10px;
+  margin-bottom: 0.7rem;
+  overflow-wrap: anywhere;
+}
+.task p {
+  margin-top: 0;
+  color: var(--foreground);
+}
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+}
+.metrics article {
+  display: grid;
+  gap: 0.5rem;
+  padding: 1rem;
+  border-radius: 10px;
+  background: #101b15;
+}
+.metrics strong {
+  font-size: 2rem;
+  font-weight: 550;
+}
+.metrics span {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.score {
+  border-bottom: 1px solid #304b37;
+  padding: 0.6rem;
+}
+footer {
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-top: 1.5rem;
+  line-height: 1.6;
+}
+.row label {
+  display: grid;
+  gap: 0.5rem;
+}
+.row input[type='range'] {
+  padding: 0;
+}
+body.compact main {
+  padding: 1rem;
+}
+body.compact .card {
+  padding: 1rem;
+}
+@media (max-width: 900px) {
+  .shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .sidebar {
+    border-right: 0;
+    border-bottom: 1px solid #253c2c;
+    padding: 1rem;
+  }
+  .sidebar nav {
+    min-width: 0;
+    display: flex;
+    overflow-x: auto;
+    gap: 0.4rem;
+  }
+  .sidebar nav button {
+    white-space: nowrap;
+  }
+  .sidebar .subtitle,
+  .connected {
+    display: none;
+  }
+  main {
+    padding: 1.2rem;
+  }
+  header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .two-columns {
+    grid-template-columns: 1fr;
+  }
+  .metrics {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+@media (max-width: 520px) {
+  .kanban {
+    grid-template-columns: 1fr;
+  }
+  .choices {
+    grid-template-columns: 1fr;
+  }
+  .card {
+    padding: 1rem;
+  }
+  h1 {
+    font-size: 1.6rem;
+  }
+  .row button {
+    font-size: 0.85rem;
+  }
+  .tic-board,
+  .puzzle-board {
+    width: 100%;
+  }
+}

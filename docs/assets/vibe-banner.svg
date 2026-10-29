@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="340" viewBox="0 0 1200 340" role="img" aria-labelledby="title desc">
+  <title id="title">Vibe</title>
+  <desc id="desc">Discord administration, community, automation, AI and voice. A purple waveform on a dark background.</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#101425"/>
+      <stop offset="1" stop-color="#1b1435"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#a78bfa"/>
+      <stop offset="1" stop-color="#67e8f9"/>
+    </linearGradient>
+    <radialGradient id="glow">
+      <stop offset="0" stop-color="#8b5cf6" stop-opacity=".25"/>
+      <stop offset="1" stop-color="#8b5cf6" stop-opacity="0"/>
+    </radialGradient>
+    <clipPath id="panel"><rect width="1200" height="340" rx="24"/></clipPath>
+  </defs>
+  <g clip-path="url(#panel)">
+  <rect width="1200" height="340" rx="24" fill="url(#background)"/>
+  <ellipse cx="980" cy="155" rx="290" ry="250" fill="url(#glow)"/>
+  <path d="M32 286H1168" stroke="#ffffff" stroke-opacity=".08"/>
+  <g fill="none" stroke="#ffffff" stroke-opacity=".035">
+    <path d="M0 56H1200M0 112H1200M0 168H1200M0 224H1200"/>
+    <path d="M56 0V286M112 0V286M168 0V286M224 0V286M280 0V286M336 0V286M392 0V286M448 0V286M504 0V286M560 0V286M616 0V286M672 0V286M728 0V286M784 0V286M840 0V286M896 0V286M952 0V286M1008 0V286M1064 0V286M1120 0V286"/>
+  </g>
+  <rect x="58" y="54" width="7" height="139" rx="3.5" fill="url(#accent)"/>
+  <g font-family="system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+    <text x="88" y="139" fill="#f8fafc" font-size="94" font-weight="750" letter-spacing="-5">Vibe</text>
+    <text x="92" y="186" fill="#d6d9ea" font-size="22" font-weight="450">Your server. In sync.</text>
+    <text x="61" y="244" fill="#aeb6d2" font-size="17">Administration · Moderation · Community · AI · Voice</text>
+    <text x="61" y="318" fill="#8c96b3" font-size="13" letter-spacing="1.8">TYPESCRIPT / NODE.JS 24 / SQLITE</text>
+  </g>
+  <g fill="none" stroke-linecap="round">
+    <path d="M778 168H1128" stroke="#a78bfa" stroke-opacity=".13" stroke-width="2"/>
+    <path d="M788 153V183M815 137V199M842 111V225M869 139V197M896 84V252M923 123V213M950 59V277M977 105V231M1004 129V207M1031 91V245M1058 120V216M1085 143V193M1112 156V180" stroke="url(#accent)" stroke-width="10"/>
+  </g>
+  </g>
+</svg>

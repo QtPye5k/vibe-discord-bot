@@ -1,0 +1,8 @@
+node_modules
+dist
+data
+backups
+pnpm-lock.yaml
+docs/actions.json
+docs/capabilities.json
+docs/requirements.md

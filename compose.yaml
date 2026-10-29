@@ -1,0 +1,26 @@
+services:
+  bot:
+    build:
+      context: .
+      args:
+        LOCAL_WHISPER_MODEL: ${LOCAL_WHISPER_MODEL:-Xenova/whisper-tiny.en}
+    init: true
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_PATH: /app/data/bot.sqlite
+      HEALTH_HOST: 0.0.0.0
+      HEALTH_PORT: 3000
+      # Compose's restart policy provides supervision for graceful system.restart (exit 75).
+      BOT_SUPERVISED: '1'
+    volumes:
+      - bot-data:/app/data
+      - ./config:/app/config:ro
+    stop_grace_period: 2m
+    mem_limit: ${BOT_MEMORY_LIMIT:-3072m}
+    cpus: 2
+    ports:
+      - '127.0.0.1:3000:3000'
+    # Voice requires outbound UDP; a host firewall must allow Discord voice traffic.
+volumes:
+  bot-data:

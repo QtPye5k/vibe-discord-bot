@@ -1,0 +1,63 @@
+{
+  "name": "vibe-discord-bot",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Vibe: modular Discord administration, community, automation and AI bot",
+  "type": "module",
+  "engines": {
+    "node": ">=24.17.0 <25"
+  },
+  "packageManager": "pnpm@11.25.0",
+  "scripts": {
+    "dev": "tsx src/main.ts",
+    "build": "tsc -p tsconfig.build.json && node scripts/build-web.mjs",
+    "start": "node scripts/start.mjs",
+    "start:supervised": "node scripts/supervise.mjs",
+    "start:agent": "node dist/host-agent/main.js",
+    "start:monitor": "node dist/monitor/main.js",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test test/*.test.ts",
+    "test:coverage": "tsx --test --experimental-test-coverage test/*.test.ts",
+    "check": "pnpm check:publication && pnpm typecheck && pnpm test && pnpm build && pnpm smoke && pnpm format:check",
+    "check:publication": "node scripts/check-publication.mjs",
+    "smoke": "tsx scripts/smoke.ts",
+    "format": "prettier --write src scripts test web config *.json *.yaml .github *.md docs/*.md",
+    "format:check": "prettier --check src scripts test web config *.json *.yaml .github *.md docs/*.md",
+    "capabilities": "tsx scripts/catalog.ts --write && tsx scripts/capabilities.ts",
+    "doctor": "tsx scripts/doctor.ts",
+    "voice:prepare": "tsx scripts/prepare-voice.ts",
+    "deploy:commands": "tsx scripts/deploy-commands.ts",
+    "backup": "tsx scripts/backup.ts",
+    "package:portable": "tsx scripts/package-portable.ts",
+    "configure": "tsx scripts/configure-env.ts",
+    "catalog": "tsx scripts/catalog.ts"
+  },
+  "dependencies": {
+    "@discordjs/voice": "0.19.2",
+    "discord.js": "14.27.0",
+    "dotenv": "17.2.3",
+    "fast-xml-parser": "5.11.2",
+    "fflate": "0.8.3",
+    "openai": "7.45.1",
+    "opusscript": "0.0.8",
+    "pdf-lib": "1.17.1",
+    "pg": "8.23.1",
+    "prism-media": "1.3.5",
+    "sharp": "0.35.5",
+    "ws": "8.22.0",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@discord/embedded-app-sdk": "2.5.0",
+    "@types/node": "24.10.0",
+    "@types/pg": "8.23.1",
+    "@types/ws": "8.18.2",
+    "esbuild": "0.27.3",
+    "prettier": "3.9.10",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2"
+  },
+  "optionalDependencies": {
+    "@huggingface/transformers": "3.8.1"
+  }
+}
