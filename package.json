@@ -18,7 +18,7 @@
     "typecheck": "tsc --noEmit",
     "test": "tsx --test test/*.test.ts",
     "test:coverage": "tsx --test --experimental-test-coverage test/*.test.ts",
-    "check": "pnpm check:publication && pnpm typecheck && pnpm test && pnpm build && pnpm smoke && pnpm format:check",
+    "check": "pnpm typecheck && pnpm test && pnpm build && pnpm smoke && pnpm format:check",
     "check:publication": "node scripts/check-publication.mjs",
     "smoke": "tsx scripts/smoke.ts",
     "format": "prettier --write src scripts test web config *.json *.yaml .github *.md docs/*.md",

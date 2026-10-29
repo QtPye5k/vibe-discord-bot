@@ -1,6 +1,6 @@
 # Contributing to Vibe
 
-Use issues for reproducible bugs and focused feature proposals. Check the [feature guides](README.md#feature-guides) and existing issues first. Report suspected vulnerabilities through [SECURITY.md](SECURITY.md).
+Use issues for reproducible bugs and focused feature proposals. Check the [feature guides](README.md#explore-the-project) and existing issues first. Report suspected vulnerabilities through [SECURITY.md](SECURITY.md).
 
 ## Local development
 
@@ -21,7 +21,7 @@ Keep each pull request focused. Follow the existing module structure described i
 
 Add a meaningful regression test for changed behavior, especially permission changes or delayed results. Documentation-only changes can use formatting and link checks. Update affected guides; when registered actions or capability mappings change, run `pnpm capabilities` and include the generated catalog changes.
 
-Before submitting, run `pnpm check` and `pnpm audit --prod --audit-level high` where practical. State exactly what ran and why any check was skipped. Separate automated results from live Discord/provider testing; codec tests do not establish live voice connectivity.
+Before submitting, run `pnpm check`, `pnpm check:publication` and `pnpm audit --prod --audit-level high` where practical. The publication guard inspects the exact Git index and also runs separately in CI; portable source ZIPs do not need Git to start the application. State exactly what ran and why any check was skipped. Separate automated results from live Discord/provider testing; codec tests do not establish live voice connectivity.
 
 ## Protect local data
 
