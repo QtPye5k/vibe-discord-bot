@@ -3,6 +3,7 @@ import type { ActionOutcome } from '../core/registry.js';
 import { redact } from '../core/logger.js';
 import type { AiReply } from '../features/ai.js';
 import type { ConversationActionResult } from '../core/conversation-actions.js';
+import { publicMediaPage } from '../features/media-posting.js';
 
 export const NO_MENTIONS = { parse: [] as never[] };
 export type BotPayload = Pick<MessageCreateOptions, 'content' | 'files' | 'components' | 'allowedMentions'>;
@@ -30,6 +31,7 @@ export function confirmationRows(
   pending: Extract<ActionOutcome, { status: 'confirmation' }>[],
 ): ActionRowBuilder<ButtonBuilder>[] {
   return pending
+    .filter((item) => !item.approvalChannelId)
     .slice(0, 5)
     .map((item) =>
       new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -45,11 +47,26 @@ export function confirmationRows(
     );
 }
 export function preview(item: Extract<ActionOutcome, { status: 'confirmation' }>): string {
+  if (item.approvalChannelId)
+    return `Approval request sent to <#${item.approvalChannelId}>. An authorized reviewer must approve or reject it there.`;
   return `**Awaiting confirmation: ${item.action}**\nID: \`${item.id}\` · expires <t:${Math.floor(item.expiresAt / 1000)}:R>\n\`\`\`json\n${stringify(item.input).replaceAll('```', '[code fence]')}\n\`\`\``;
 }
 export function outcomePayload(outcome: ActionOutcome): BotPayload {
   if (outcome.status === 'confirmation') return textPayload(preview(outcome), confirmationRows([outcome]));
   const result = outcome.result;
+  if (
+    result &&
+    typeof result === 'object' &&
+    'status' in result &&
+    result.status === 'approval-routed' &&
+    'approvalChannelId' in result &&
+    typeof result.approvalChannelId === 'string'
+  )
+    return textPayload(
+      'notice' in result && typeof result.notice === 'string'
+        ? result.notice
+        : `Staff approval is required in <#${result.approvalChannelId}> before this operation can run.`,
+    );
   if (
     outcome.action === 'premium.purchase' &&
     result &&
@@ -94,24 +111,36 @@ export function outcomePayload(outcome: ActionOutcome): BotPayload {
           typeof item === 'object' &&
           Number.isInteger(item.index) &&
           item.index >= 1 &&
-          item.index <= 5 &&
+          item.index <= 8 &&
           typeof item.title === 'string' &&
           typeof item.source === 'string' &&
-          item.source.startsWith('https://commons.wikimedia.org/') &&
+          safeMediaSource(item.source) &&
           !/[<>\r\n]/.test(item.source) &&
           typeof item.license === 'string',
       )
-      .slice(0, 5);
-    const rows = items.map((item) =>
-      new ActionRowBuilder<ButtonBuilder>().addComponents(
-        new ButtonBuilder()
-          .setCustomId(`media:pick:${result.searchId}:${item.index}`)
-          .setLabel(`${item.index}. ${item.title}`.slice(0, 80).toWellFormed())
-          .setStyle(ButtonStyle.Primary),
-      ),
-    );
+      .slice(0, 8);
+    const rows: ActionRowBuilder<ButtonBuilder>[] = [];
+    for (let start = 0; start < items.length; start += 4)
+      rows.push(
+        new ActionRowBuilder<ButtonBuilder>().addComponents(
+          ...items
+            .slice(start, start + 4)
+            .map((item) =>
+              new ButtonBuilder()
+                .setCustomId(`media:pick:${result.searchId}:${item.index}`)
+                .setLabel(`${item.index}. ${item.title}`.slice(0, 80).toWellFormed())
+                .setStyle(ButtonStyle.Primary),
+            ),
+        ),
+      );
+    const provider =
+      'provider' in result && result.provider === 'KLIPY'
+        ? 'KLIPY'
+        : 'provider' in result && result.provider === 'Pinterest public partner search'
+          ? 'Pinterest'
+          : 'Wikimedia Commons';
     return textPayload(
-      `**Wikimedia Commons · ${items.length} results**\nChoose a result to review before sending it to this channel.\n\n${items.map((item) => `${item.index}. ${item.title}\n${item.license} · <${item.source}>`).join('\n\n')}\n\nSelections expire after ten minutes. Source pages contain full attribution and license terms.`,
+      `**${provider} · ${items.length} results**\nChoose a result to send to this channel. The configured confirmation policy applies.\n\n${items.map((item) => `${item.index}. ${item.title}\n${item.license} · <${item.source}>`).join('\n\n')}\n\nSelections expire after ten minutes. Source pages contain attribution and provider terms.`,
       rows,
     );
   }
@@ -134,6 +163,26 @@ export function outcomePayload(outcome: ActionOutcome): BotPayload {
       ? result
       : `\`\`\`json\n${stringify(result).replaceAll('```', '[code fence]')}\n\`\`\``;
   return textPayload(`Completed: **${outcome.action}**\n${content}`);
+}
+function safeMediaSource(value: string): boolean {
+  try {
+    const url = new URL(value);
+    if (
+      url.protocol === 'https:' &&
+      url.hostname === 'commons.wikimedia.org' &&
+      !url.username &&
+      !url.password &&
+      !url.port &&
+      !url.search &&
+      !url.hash &&
+      url.pathname.startsWith('/wiki/File')
+    )
+      return true;
+    publicMediaPage(value);
+    return true;
+  } catch {
+    return false;
+  }
 }
 export function textPayload(content: string, components: ActionRowBuilder<ButtonBuilder>[] = []): BotPayload {
   const safe = redact(content);

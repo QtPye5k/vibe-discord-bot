@@ -7689,7 +7689,7 @@
   {
     "id": "gif.search",
     "category": "media",
-    "description": "Search public Wikimedia Commons GIF files with attribution (Commons catalog, not Giphy/Tenor).",
+    "description": "Search GIFs using approved KLIPY when configured or Commons. Explicit provider klipy requires its optional key and bot approval. Pinterest has no GIF-only API.",
     "risk": "read",
     "userPermissions": [],
     "botPermissions": [],
@@ -7701,6 +7701,16 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 150
+        },
+        "provider": {
+          "default": "auto",
+          "type": "string",
+          "enum": [
+            "auto",
+            "commons",
+            "klipy",
+            "pinterest"
+          ]
         }
       },
       "required": [
@@ -9173,7 +9183,7 @@
       "type": "object",
       "properties": {
         "id": {
-          "default": "17bc2a3f22621cb76445436c3b1d3210",
+          "default": "39959fb20fd3b85bec3911b6a28dfc15",
           "type": "string",
           "pattern": "^[a-f0-9]{32}$"
         },
@@ -9924,7 +9934,7 @@
   {
     "id": "image.search",
     "category": "media",
-    "description": "Search public Wikimedia Commons raster images with source, artist and license metadata; no extra API key.",
+    "description": "Search public images using Commons (no key) or approved Pinterest public partner search (provider pinterest); returns exact selections for media.search-send.",
     "risk": "read",
     "userPermissions": [],
     "botPermissions": [],
@@ -9936,6 +9946,16 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 150
+        },
+        "provider": {
+          "default": "auto",
+          "type": "string",
+          "enum": [
+            "auto",
+            "commons",
+            "klipy",
+            "pinterest"
+          ]
         }
       },
       "required": [
@@ -13512,6 +13532,41 @@
     }
   },
   {
+    "id": "media.generate-send",
+    "category": "media",
+    "description": "Generate an OpenAI image from a prompt and post it to the requested permitted channel, using the configured image model and AI quota. Optional requestId prevents duplicate retries.",
+    "risk": "write",
+    "userPermissions": [],
+    "botPermissions": [],
+    "schema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "prompt": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000
+        },
+        "transparent": {
+          "default": false,
+          "type": "boolean"
+        },
+        "channelId": {
+          "type": "string",
+          "pattern": "^\\d{17,20}$"
+        },
+        "requestId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{8,64}$"
+        }
+      },
+      "required": [
+        "prompt"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
     "id": "media.index.add",
     "category": "media",
     "description": "Index an explicitly supplied image using exact SHA-256 and a 64-bit perceptual difference hash; retains no image bytes.",
@@ -13588,16 +13643,42 @@
     }
   },
   {
+    "id": "media.link-send",
+    "category": "media",
+    "description": "Post a user-supplied original public Pinterest Pin or KLIPY GIF link to a permitted channel without scraping/rehosting or a provider key. Discord controls previews; animation is not guaranteed.",
+    "risk": "write",
+    "userPermissions": [],
+    "botPermissions": [],
+    "schema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "channelId": {
+          "type": "string",
+          "pattern": "^\\d{17,20}$"
+        },
+        "requestId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{8,64}$"
+        }
+      },
+      "required": [
+        "url"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
     "id": "media.search-send",
     "category": "media",
-    "description": "Send an exact returned Commons image/GIF selection to a visible writable server channel with attribution; search origin and owner bound, expiring and one-use per result. Uses the configured confirmation policy.",
+    "description": "Send an exact returned Commons, KLIPY or Pinterest media selection to any permitted requested server channel; origin/owner bound, expiring and one-use. Provider content uses direct links and source attribution.",
     "risk": "write",
-    "userPermissions": [
-      "32768"
-    ],
-    "botPermissions": [
-      "32768"
-    ],
+    "userPermissions": [],
+    "botPermissions": [],
     "schema": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
@@ -13609,7 +13690,7 @@
         "index": {
           "type": "integer",
           "minimum": 1,
-          "maximum": 5
+          "maximum": 8
         },
         "title": {
           "type": "string",
@@ -15186,7 +15267,7 @@
   {
     "id": "moderation.automatic.configure",
     "category": "moderation",
-    "description": "Configure automatic explicit-content deletion and the channel whose posts trigger immediate bans; one exact policy approval.",
+    "description": "Configure explicit-content deletion, progressive penalties and honeypot bans; one exact policy approval.",
     "risk": "write",
     "userPermissions": [
       "32"
@@ -15203,6 +15284,9 @@
           "type": "boolean"
         },
         "imagesEnabled": {
+          "type": "boolean"
+        },
+        "explicitEscalationEnabled": {
           "type": "boolean"
         },
         "honeypotChannelId": {

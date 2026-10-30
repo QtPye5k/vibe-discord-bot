@@ -6,8 +6,15 @@ import type { ActionContext } from '../core/types.js';
 import { assertUserRequestCurrent } from '../core/types.js';
 import { UserError } from '../core/errors.js';
 import { freshContext, resolveChannel } from '../core/permissions.js';
-import { fetchPublic, publicUrl, type PublicTransport } from './integrations.js';
+import { fetchPublic, publicUrl } from './integrations.js';
 import { runMediaJob } from './media.js';
+import {
+  searchProvider,
+  providerMediaUrl,
+  recordKlipyShare,
+  type MediaProviderOptions,
+  type MediaProvider,
+} from './media-providers.js';
 
 export const MEDIA_SEARCH_LIMITS = Object.freeze({
   results: 5,
@@ -21,6 +28,11 @@ export const MEDIA_SEARCH_LIMITS = Object.freeze({
   fileBytes: 2 * 1024 * 1024,
 });
 interface SearchResult {
+  provider?: MediaProvider;
+  delivery?: 'link';
+  slug?: string;
+  query?: string;
+  customerId?: string;
   title: string;
   url: string;
   source: string;
@@ -41,14 +53,16 @@ interface SearchToken {
   expiresAt: number;
   results: SearchResult[];
 }
-export interface MediaSearchOptions {
-  transport?: PublicTransport;
+export interface MediaSearchOptions extends MediaProviderOptions {
   now?: () => number;
 }
-const searchSchema = z.strictObject({ query: z.string().trim().min(1).max(150) });
+const searchSchema = z.strictObject({
+  query: z.string().trim().min(1).max(150),
+  provider: z.enum(['auto', 'commons', 'klipy', 'pinterest']).default('auto'),
+});
 const sendSchema = z.strictObject({
   searchId: z.string().regex(/^[A-Za-z0-9_-]{16}$/),
-  index: z.number().int().min(1).max(5),
+  index: z.number().int().min(1).max(8),
   title: z.string().min(1).max(200),
   channelId: z
     .string()
@@ -216,8 +230,25 @@ export class MediaSearchService {
       this.pending.delete(key);
     }
   }
-  async search(ctx: ActionContext, query: string, kind: 'image' | 'gif'): Promise<unknown> {
+  async search(
+    ctx: ActionContext,
+    query: string,
+    kind: 'image' | 'gif',
+    requested: 'auto' | MediaProvider = 'auto',
+  ): Promise<unknown> {
     query = searchSchema.parse({ query }).query;
+    const provider =
+      requested === 'auto'
+        ? kind === 'gif' && this.options.klipyApiKey && this.options.klipyBotApproved
+          ? 'klipy'
+          : 'commons'
+        : requested;
+    if (provider === 'klipy' && kind !== 'gif')
+      throw new UserError('KLIPY provides GIF search. Use gif.search with provider klipy.');
+    if (provider === 'pinterest' && kind === 'gif')
+      throw new UserError(
+        'Pinterest has no supported GIF-only search endpoint. Use image.search with provider pinterest for approved public image search, or media.link-send for a supplied Pinterest Pin link; animation is not guaranteed.',
+      );
     const records = ctx.store.list<SearchToken>('media.search');
     for (const record of records)
       if (record.value.expiresAt <= this.now()) ctx.store.delete('media.search', record.key);
@@ -233,7 +264,13 @@ export class MediaSearchService {
       throw new UserError(
         'Media search selection limit reached. Existing selections expire after ten minutes.',
       );
-    const results = await this.query(query, kind),
+    const results: SearchResult[] =
+        provider === 'commons'
+          ? await this.query(query, kind)
+          : (await searchProvider(provider, query, ctx.member.id, this.options)).map((result) => ({
+              ...result,
+              state: 'available',
+            })),
       searchId = randomBytes(12).toString('base64url'),
       expiresAt = this.now() + MEDIA_SEARCH_LIMITS.tokenMs;
     assertUserRequestCurrent(ctx);
@@ -257,7 +294,12 @@ export class MediaSearchService {
       results: structuredClone(results),
     } satisfies SearchToken);
     return {
-      provider: 'Wikimedia Commons',
+      provider:
+        provider === 'commons'
+          ? 'Wikimedia Commons'
+          : provider === 'klipy'
+            ? 'KLIPY'
+            : 'Pinterest public partner search',
       searchId,
       expiresAt,
       results: results.map((result, index) => ({
@@ -274,7 +316,7 @@ export class MediaSearchService {
         send: { searchId, index: index + 1, title: result.title },
       })),
       notice:
-        'Use media.search-send with an exact returned selection and optional target channelId. A direct send request can choose a relevant result without another questionnaire; the configured confirmation policy still applies. Attribution and full license terms are on each source file page. GIF search covers Commons files; it is not a Giphy/Tenor search.',
+        'Use media.search-send with an exact returned selection and optional target channelId. The configured confirmation policy applies. Provider links are posted without rehosting media. Pinterest search covers public image Pins only; it does not provide GIF animation search. Original source terms and creator rights apply.',
     };
   }
   private selection(
@@ -301,37 +343,34 @@ export class MediaSearchService {
     assertUserRequestCurrent(ctx);
     const input = sendSchema.parse(raw),
       selected = this.selection(ctx, input).result;
-    const response = await fetchPublic(
-      commonsUploadUrl(selected.url),
-      {
-        allowedHosts: ['upload.wikimedia.org'],
-        maxBytes: MEDIA_SEARCH_LIMITS.fileBytes,
-        headers: { Accept: selected.mime },
-      },
-      this.options.transport,
-    );
+    const response =
+      selected.delivery === 'link'
+        ? undefined
+        : await fetchPublic(
+            commonsUploadUrl(selected.url),
+            {
+              allowedHosts: ['upload.wikimedia.org'],
+              maxBytes: MEDIA_SEARCH_LIMITS.fileBytes,
+              headers: { Accept: selected.mime },
+            },
+            this.options.transport,
+          );
     if (
-      response.status !== 200 ||
-      response.headers['content-type']?.split(';')[0]?.toLowerCase() !== selected.mime
+      response &&
+      (response.status !== 200 ||
+        response.headers['content-type']?.split(';')[0]?.toLowerCase() !== selected.mime)
     )
       throw new UserError('Selected image download has an invalid status or media type.');
-    const inspected = await runMediaJob({ kind: 'image-info', data: response.body });
+    const inspected = response ? await runMediaJob({ kind: 'image-info', data: response.body }) : undefined;
     assertUserRequestCurrent(ctx);
-    if (!('format' in inspected) || inspected.format !== formats[selected.mime])
+    if (inspected && (!('format' in inspected) || inspected.format !== formats[selected.mime]))
       throw new UserError('Selected media bytes do not match the declared image format.');
-    const fresh = await freshContext(ctx),
-      channel = await resolveChannel(fresh, input.channelId ?? ctx.channelId);
-    assertUserRequestCurrent(fresh);
-    const send = channel.isThread() ? P.SendMessagesInThreads : P.SendMessages;
-    for (const principal of [fresh.member, fresh.guild.members.me!])
-      if (!channel.permissionsFor(principal)?.has([P.ViewChannel, send, P.AttachFiles]))
-        throw new UserError(
-          'You and the bot need current View Channel, Send Messages and Attach Files permissions.',
-        );
-    if (!channel.isTextBased() || !('send' in channel))
-      throw new UserError('Send media from a writable server text channel.');
-    if ((ctx.store.get<string[]>('core.disabled', ctx.guild.id) ?? []).includes('media'))
-      throw new UserError('Media is disabled in this server.');
+    if (selected.delivery === 'link') providerMediaUrl(selected.url, selected.provider!);
+    const { fresh, channel } = await resolveMediaDestination(
+      ctx,
+      input.channelId ?? ctx.channelId,
+      selected.delivery !== 'link',
+    );
     ctx.store.transaction(() => {
       const { token, result } = this.selection(fresh, input);
       result.state = 'sending';
@@ -339,15 +378,20 @@ export class MediaSearchService {
     });
     try {
       assertUserRequestCurrent(fresh);
-      const attribution = `${selected.title}\nArtist: ${selected.artist}${selected.credit ? `\nCredit: ${selected.credit}` : ''}\nLicense: ${selected.license}\nSource and full terms: ${selected.source}`;
+      const attribution =
+        selected.delivery === 'link'
+          ? `${selected.title}\n${selected.credit}\n${selected.url}\nSource: <${selected.source}>`
+          : `${selected.title}\nArtist: ${selected.artist}${selected.credit ? `\nCredit: ${selected.credit}` : ''}\nLicense: ${selected.license}\nSource and full terms: ${selected.source}`;
       const message = await channel.send({
         content: attribution.slice(0, 1900),
-        files: [
-          {
-            attachment: response.body,
-            name: `commons-image.${formats[selected.mime] === 'jpeg' ? 'jpg' : formats[selected.mime]}`,
-          },
-        ],
+        files: response
+          ? [
+              {
+                attachment: response.body,
+                name: `commons-image.${formats[selected.mime] === 'jpeg' ? 'jpg' : formats[selected.mime]}`,
+              },
+            ]
+          : [],
         allowedMentions: { parse: [] },
       });
       const token = ctx.store.get<SearchToken>('media.search', input.searchId);
@@ -361,7 +405,10 @@ export class MediaSearchService {
         channelId: channel.id,
         title: selected.title,
         source: selected.source,
-        provider: 'Wikimedia Commons',
+        provider: selected.provider ?? 'commons',
+        ...(selected.provider === 'klipy'
+          ? { shareReported: await recordKlipyShare({ ...selected, provider: 'klipy' }, this.options) }
+          : {}),
       };
     } catch (error) {
       const token = ctx.store.get<SearchToken>('media.search', input.searchId);
@@ -373,6 +420,28 @@ export class MediaSearchService {
     }
   }
 }
+/** Source request provenance stays bound to the origin; the destination is independently refreshed. */
+export async function resolveMediaDestination(ctx: ActionContext, channelId: string, attachment: boolean) {
+  assertUserRequestCurrent(ctx);
+  const fresh = await freshContext(ctx),
+    channel = await resolveChannel(fresh, channelId);
+  assertUserRequestCurrent(fresh);
+  if (!channel.isTextBased() || !('send' in channel))
+    throw new UserError('Choose a writable server text channel.');
+  const send = channel.isThread() ? P.SendMessagesInThreads : P.SendMessages;
+  for (const principal of [fresh.member, fresh.guild.members.me!])
+    if (
+      !channel
+        .permissionsFor(principal)
+        ?.has([P.ViewChannel, send, attachment ? P.AttachFiles : P.EmbedLinks])
+    )
+      throw new UserError(
+        `You and the bot need current View Channel, Send Messages and ${attachment ? 'Attach Files' : 'Embed Links'} permissions in the destination.`,
+      );
+  if ((ctx.store.get<string[]>('core.disabled', ctx.guild.id) ?? []).includes('media'))
+    throw new UserError('Media is disabled in this server.');
+  return { fresh, channel };
+}
 export function registerMediaSearchActions(registry: ActionRegistry, options: MediaSearchOptions = {}): void {
   const service = new MediaSearchService(options),
     base = { category: 'media', userPermissions: [], botPermissions: [], risk: 'read' as const };
@@ -380,26 +449,24 @@ export function registerMediaSearchActions(registry: ActionRegistry, options: Me
     ...base,
     id: 'image.search',
     description:
-      'Search public Wikimedia Commons raster images with source, artist and license metadata; no extra API key.',
+      'Search public images using Commons (no key) or approved Pinterest public partner search (provider pinterest); returns exact selections for media.search-send.',
     schema: searchSchema,
-    execute: (ctx, input) => service.search(ctx, input.query, 'image'),
+    execute: (ctx, input) => service.search(ctx, input.query, 'image', input.provider),
   });
   registry.register({
     ...base,
     id: 'gif.search',
     description:
-      'Search public Wikimedia Commons GIF files with attribution (Commons catalog, not Giphy/Tenor).',
+      'Search GIFs using approved KLIPY when configured or Commons. Explicit provider klipy requires its optional key and bot approval. Pinterest has no GIF-only API.',
     schema: searchSchema,
-    execute: (ctx, input) => service.search(ctx, input.query, 'gif'),
+    execute: (ctx, input) => service.search(ctx, input.query, 'gif', input.provider),
   });
   registry.register({
     ...base,
     id: 'media.search-send',
     risk: 'write',
-    userPermissions: [P.AttachFiles],
-    botPermissions: [P.AttachFiles],
     description:
-      'Send an exact returned Commons image/GIF selection to a visible writable server channel with attribution; search origin and owner bound, expiring and one-use per result. Uses the configured confirmation policy.',
+      'Send an exact returned Commons, KLIPY or Pinterest media selection to any permitted requested server channel; origin/owner bound, expiring and one-use. Provider content uses direct links and source attribution.',
     schema: sendSchema,
     execute: (ctx, input) => service.send(ctx, input),
   });

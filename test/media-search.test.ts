@@ -40,6 +40,7 @@ function fixture(t: TestContext) {
               P.ViewChannel,
               P.ReadMessageHistory,
               P.AttachFiles,
+              P.EmbedLinks,
               thread ? P.SendMessagesInThreads : P.SendMessages,
             ]
           : [],
@@ -175,7 +176,7 @@ test('A voice request cancelled during media download cannot post a late image',
   await assert.rejects(service.send(ctx, found.results[0]!.send), /expired|cancelled/);
   assert.equal(f.sent.length, 0);
 });
-test('media search registers two Commons reads and one confirmed write with no arbitrary URL input', () => {
+test('media search registers provider-selectable reads and one confirmed write with no arbitrary URL substitution', () => {
   const registry = new ActionRegistry();
   registerMediaSearchActions(registry);
   assert.equal(registry.list().length, 3);
@@ -201,6 +202,194 @@ test('media search registers two Commons reads and one confirmed write with no a
     ),
     'https://upload.wikimedia.org/wikipedia/commons/a/ab/Cat.jpg',
   );
+});
+
+test('KLIPY official GIF format preserves provider order/URLs, posts to the destination, and reports one share without exposing Discord IDs', async (t) => {
+  const f = fixture(t),
+    connections: PinnedRequest[] = [],
+    shares: { url: string; init?: RequestInit }[] = [];
+  const provider: PublicTransport = {
+    resolve: async () => [{ address: '93.184.216.34', family: 4 }],
+    connect: async (request) => {
+      connections.push(request);
+      return {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+        body: Buffer.from(
+          JSON.stringify({
+            result: true,
+            data: {
+              data: Array.from({ length: 8 }, (_, i) => ({
+                slug: `hello-${i}`,
+                title: `Hello ${i}`,
+                file: {
+                  md: {
+                    gif: {
+                      url: `https://static.klipy.com/media/hello-${i}.gif?delivery=keep`,
+                      width: 200,
+                      height: 100,
+                      size: 20000,
+                    },
+                  },
+                },
+              })),
+            },
+          }),
+        ),
+      };
+    },
+  };
+  const service = new MediaSearchService({
+    klipyApiKey: 'synthetic-klipy-example',
+    klipyBotApproved: true,
+    transport: provider,
+    shareFetch: (async (url, init) => {
+      shares.push({ url: String(url), init });
+      return new Response('{}', { status: 200 });
+    }) as typeof fetch,
+  });
+  const found = (await service.search(f.ctx, 'hello', 'gif')) as Search;
+  assert.equal(found.results.length, 8);
+  assert.equal(found.results[7]!.title, 'Hello 7');
+  assert.equal(connections[0]!.url.hostname, 'api.klipy.com');
+  assert.equal(connections[0]!.url.searchParams.get('per_page'), '8');
+  assert.equal(connections[0]!.url.searchParams.get('format_filter'), 'gif');
+  assert.equal(connections[0]!.url.searchParams.get('content_filter'), 'high');
+  assert(!connections[0]!.url.href.includes(U));
+  await service.send(f.ctx, found.results[7]!.send);
+  assert.equal(connections.length, 1, 'provider media stays at its direct URL, never downloaded/rehosted');
+  assert.match(String(f.sent[0]!.content), /https:\/\/static\.klipy\.com\/media\/hello-7.gif\?delivery=keep/);
+  assert.deepEqual(f.sent[0]!.files, []);
+  assert.equal(shares.length, 1);
+  assert.equal(shares[0]!.init!.method, 'POST');
+  assert(!String(shares[0]!.init!.body).includes(U));
+  assert.match(String(shares[0]!.init!.body), /"q":"hello"/);
+  await assert.rejects(service.send(f.ctx, found.results[7]!.send), /claimed/);
+  assert.equal(shares.length, 1);
+});
+
+test('optional providers fail clearly when unconfigured or unapproved and never silently substitute another catalog', async (t) => {
+  const f = fixture(t);
+  let calls = 0;
+  const transport: PublicTransport = {
+    resolve: async () => {
+      calls++;
+      return [];
+    },
+    connect: async () => {
+      throw new Error('unexpected');
+    },
+  };
+  const service = new MediaSearchService({ transport, klipyApiKey: 'synthetic-example' });
+  await assert.rejects(service.search(f.ctx, 'hello', 'gif', 'klipy'), /KLIPY_BOT_APPROVED/);
+  await assert.rejects(service.search(f.ctx, 'flower', 'image', 'pinterest'), /PINTEREST_ACCESS_TOKEN/);
+  await assert.rejects(service.search(f.ctx, 'dance', 'gif', 'pinterest'), /no supported GIF-only/);
+  assert.equal(calls, 0);
+});
+
+test('Pinterest uses only the official public partner endpoint and safe returned media, with authorization failures surfaced', async (t) => {
+  const f = fixture(t),
+    requests: PinnedRequest[] = [];
+  let status = 200;
+  const transport: PublicTransport = {
+    resolve: async () => [{ address: '93.184.216.34', family: 4 }],
+    connect: async (request) => {
+      requests.push(request);
+      return {
+        status,
+        headers: { 'content-type': 'application/json' },
+        body: Buffer.from(
+          JSON.stringify({
+            items: [
+              {
+                id: '123456789',
+                title: 'Public flower',
+                media: {
+                  media_type: 'image',
+                  images: {
+                    '600x': { url: 'https://i.pinimg.com/600x/aa/flower.jpg', width: 600, height: 800 },
+                  },
+                },
+              },
+              {
+                id: '987654321',
+                title: 'Invalid image',
+                media: {
+                  media_type: 'image',
+                  images: {
+                    orig: { url: 'https://i.pinimg.com.evil.test/private.jpg', width: 100, height: 100 },
+                  },
+                },
+              },
+            ],
+          }),
+        ),
+      };
+    },
+  };
+  const service = new MediaSearchService({
+    pinterestAccessToken: 'synthetic-pinterest-example',
+    pinterestCountryCode: 'US',
+    transport,
+  });
+  const found = (await service.search(f.ctx, 'flower', 'image', 'pinterest')) as Search;
+  assert.equal(found.results.length, 1);
+  assert.equal(requests[0]!.url.pathname, '/v5/search/partner/pins');
+  assert.equal(requests[0]!.url.searchParams.get('term'), 'flower');
+  assert.equal(requests[0]!.url.searchParams.get('country_code'), 'US');
+  assert.equal(requests[0]!.headers.Authorization, 'Bearer synthetic-pinterest-example');
+  await service.send(f.ctx, found.results[0]!.send);
+  assert.match(String(f.sent[0]!.content), /i\.pinimg\.com\/600x\/aa\/flower.jpg/);
+  assert.equal(requests.length, 1);
+  status = 403;
+  await assert.rejects(service.search(f.ctx, 'other', 'image', 'pinterest'), /beta approval/);
+  assert(requests.every((request) => request.url.pathname === '/v5/search/partner/pins'));
+});
+
+test('provider-link sends stop after fresh permission revocation and transport errors do not leak key-bearing URLs', async (t) => {
+  const f = fixture(t),
+    key = 'synthetic-private-provider-key';
+  const transport: PublicTransport = {
+    resolve: async () => [{ address: '93.184.216.34', family: 4 }],
+    connect: async (request) => {
+      throw new Error(`Failed ${request.url.href}`);
+    },
+  };
+  const service = new MediaSearchService({ klipyApiKey: key, klipyBotApproved: true, transport });
+  await assert.rejects(service.search(f.ctx, 'hello', 'gif', 'klipy'), (error) => {
+    assert(!String(error).includes(key));
+    return true;
+  });
+  const pinterest = new MediaSearchService({
+    pinterestAccessToken: 'synthetic-pinterest-example',
+    transport: {
+      resolve: async () => [{ address: '93.184.216.34', family: 4 }],
+      connect: async () => ({
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+        body: Buffer.from(
+          JSON.stringify({
+            items: [
+              {
+                id: '12345',
+                title: 'Public picture',
+                media: {
+                  media_type: 'image',
+                  images: {
+                    orig: { url: 'https://i.pinimg.com/originals/picture.png', width: 100, height: 100 },
+                  },
+                },
+              },
+            ],
+          }),
+        ),
+      }),
+    },
+  });
+  const found = (await pinterest.search(f.ctx, 'picture', 'image', 'pinterest')) as Search;
+  f.setAccess(false);
+  await assert.rejects(pinterest.send(f.ctx, found.results[0]!.send), /view|permission/);
+  assert.equal(f.sent.length, 0);
 });
 test('official API query is fixed-host, filtered, cached, and result tokens are owner/channel scoped', async (t) => {
   const setup = fixture(t),

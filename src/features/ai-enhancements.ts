@@ -748,18 +748,18 @@ export function registerAiEnhancementActions(
         if (outcome.status === 'confirmation') {
           const latest = ctx.store.get<Plan>('ai.plans', planKey(ctx, plan.id));
           if (!latest || latest.state !== 'running' || latest.revision !== plan.revision) {
-            registry.cancel(ctx, outcome.id);
+            registry.invalidatePending(ctx, outcome.id);
             throw new UserError('Plan was cancelled before step execution.');
           }
           try {
             await options.assertPlanApprovals?.(ctx, plan);
           } catch (error) {
-            registry.cancel(ctx, outcome.id);
+            registry.invalidatePending(ctx, outcome.id);
             throw error;
           }
           const authorized = ctx.store.get<Plan>('ai.plans', planKey(ctx, plan.id));
           if (!authorized || authorized.state !== 'running' || authorized.revision !== plan.revision) {
-            registry.cancel(ctx, outcome.id);
+            registry.invalidatePending(ctx, outcome.id);
             throw new UserError('Plan changed before confirmed step execution.');
           }
           outcome = await registry.confirm(ctx, outcome.id);

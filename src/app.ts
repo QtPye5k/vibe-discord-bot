@@ -49,6 +49,7 @@ import { registerMediaWorkflowActions, onMediaMemberJoin } from './features/medi
 import { loadPlugins, type PluginLoadResult } from './core/plugins.js';
 import { Logger, redact } from './core/logger.js';
 import { ActionRegistry } from './core/registry.js';
+import { createConfirmationPolicy } from './core/confirmation-policy.js';
 import { assertUserRequestCurrent, userRequestContext, type ActionContext } from './core/types.js';
 import { handleConversationAction, rememberConversationActions } from './core/conversation-actions.js';
 import { publicConversationAction } from './features/ai-conversation.js';
@@ -74,6 +75,7 @@ import { registerDiscordActions } from './discord/actions.js';
 import { resolveSlashCommandName } from './discord/commands.js';
 import { handlePersonalInteraction } from './discord/personal.js';
 import { routeVoiceCommand } from './discord/voice-commands.js';
+import { parseChatCommand } from './discord/chat-commands.js';
 import {
   aiPayload,
   conversationPayload,
@@ -208,6 +210,13 @@ export function createServices(config: Config, options: { store?: Store; client?
   const registry = new ActionRegistry(config.confirmationSeconds, undefined, {
     confirmationMode: config.confirmationMode,
   });
+  registry.setConfirmationPolicy(
+    createConfirmationPolicy({
+      channelId: config.confirmationChannelId,
+      name: config.confirmationChannelName,
+      isPrivateAction: (id) => !publicConversationAction(registry.get(id)),
+    }),
+  );
   const explicitClassifier = createExplicitClassifier({
     apiKey: config.openaiKey,
     model: config.moderationModel,
@@ -615,7 +624,7 @@ export function createServices(config: Config, options: { store?: Store; client?
   registerAiActions(registry, ai);
   registerAiEnhancementActions(registry, ai, {
     operatorIds: config.operatorIds,
-    assertPlanApprovals,
+    assertPlanApprovals: (ctx, plan) => assertPlanApprovals(ctx, plan, registry),
     modelRoutes: optionalMap('AI_MODEL_ROUTES_JSON'),
     logFiles: Object.fromEntries(
       Object.entries(optionalMap('AI_LOG_FILES_JSON')).map(([id, path]) => [id, projectPath(path)]),
@@ -643,7 +652,12 @@ export function createServices(config: Config, options: { store?: Store; client?
   );
   registerMediaActions(registry);
   registerMediaWorkflowActions(registry, { ai });
-  registerMediaSearchActions(registry);
+  registerMediaSearchActions(registry, {
+    klipyApiKey: env.KLIPY_API_KEY,
+    klipyBotApproved: env.KLIPY_BOT_APPROVED === 'true',
+    pinterestAccessToken: env.PINTEREST_ACCESS_TOKEN,
+    pinterestCountryCode: env.PINTEREST_COUNTRY_CODE,
+  });
   registerFileActions(registry);
   registerAudioMediaActions(registry);
   registerServerLayoutActions(registry);
@@ -1166,7 +1180,7 @@ export function bindEvents(services: Services): () => Promise<void> {
           }>('media.search', parts[2] ?? '');
           if (
             parts[1] !== 'pick' ||
-            !/^[1-5]$/.test(parts[3] ?? '') ||
+            !/^[1-8]$/.test(parts[3] ?? '') ||
             !record ||
             record.userId !== ctx.member.id ||
             record.guildId !== ctx.guild.id ||
@@ -1196,7 +1210,7 @@ export function bindEvents(services: Services): () => Promise<void> {
         } else if (operation === 'confirm') payload = outcomePayload(await registry.confirm(ctx, id ?? ''));
         else if (operation === 'cancel')
           payload = textPayload(
-            registry.cancel(ctx, id ?? '') ? 'Cancelled.' : 'Confirmation is unavailable.',
+            (await registry.reject(ctx, id ?? '')) ? 'Cancelled.' : 'Confirmation is unavailable.',
           );
         else if (operation === 'help')
           payload = helpPayload(services, decodeURIComponent(query ?? ''), Number(id) || 0);
@@ -1397,20 +1411,20 @@ export function bindEvents(services: Services): () => Promise<void> {
       moderationSuppressed.add(message);
       return;
     }
-    if (!message.author.bot && !message.webhookId)
+    const checkSpam = async () => {
+      if (message.author.bot || message.webhookId) return false;
       try {
-        if (await onCommunityMessage(message, store, { spamOnly: true })) {
-          moderationSuppressed.add(message);
-          return;
-        }
+        return await onCommunityMessage(message, store, { spamOnly: true });
       } catch (error) {
         logger.error('message.spam.failed', error);
+        return false;
       }
-    if (
-      config.autoModerationEnabled &&
-      !inHoneypot &&
-      (await services.automaticModeration.processMessage(message))
-    ) {
+    };
+    const handled =
+      config.autoModerationEnabled && !inHoneypot
+        ? await services.automaticModeration.processWithSpamCheck(message, checkSpam)
+        : await checkSpam();
+    if (handled) {
       moderationSuppressed.add(message);
       return;
     }
@@ -1473,6 +1487,21 @@ export function bindEvents(services: Services): () => Promise<void> {
           ? message.content.slice(config.prefix.length).trim()
           : message.content.trim();
       let payload;
+      let privateReply: Message | undefined;
+      const preparePrivateDelivery = async () => {
+        if (!privateReply) {
+          try {
+            privateReply = await message.author.send({
+              content: 'I’m handling your Vibe request privately. The result will appear here.',
+              allowedMentions: NO_MENTIONS,
+            });
+          } catch {
+            throw new UserError(
+              'Enable direct messages from this server so I can deliver this private result, then ask again.',
+            );
+          }
+        }
+      };
       try {
         const ctx = userRequestContext(
           await commandContext(services, message.guild!, message.author, message.channelId),
@@ -1491,35 +1520,71 @@ export function bindEvents(services: Services): () => Promise<void> {
           payload = textPayload(
             `Hi, I’m ${config.botName}. Mention me with a question, or use /ask prompt:your question. Use /help to find my commands.`,
           );
-        else if (request === 'help') payload = helpPayload(services);
-        else if (request.startsWith('action '))
-          throw new UserError(
-            'Use /action for actions and private results, or /ask for private AI assistance.',
-          );
         else {
-          const approval = await handleConversationAction(ctx, request, registry, {
-            allowAction: (id) => publicConversationAction(registry.get(id)),
-          });
-          if (approval.handled) payload = conversationPayload(approval);
-          else {
-            const reply = await ai.chat(ctx, request, undefined, true, {
-              memoryScope: 'public-mention',
-              usePreferences: false,
-              retainHistory: true,
-              historyTtlSeconds: 600,
-              timeZone: config.timeZone,
-              responsePrivacy: 'public',
-              allowWebSearch: /\b(?:search|look up|find|link|latest|weather|today|news)\b/i.test(request),
+          const command = parseChatCommand(request);
+          if (command?.kind === 'help') payload = helpPayload(services, command.query);
+          else if (command?.kind === 'schema') {
+            const spec = registry.get(command.action);
+            payload = textPayload(
+              stringify({
+                action: spec.id,
+                description: spec.description,
+                risk: spec.risk,
+                schema: z.toJSONSchema(spec.schema, { io: 'input' }),
+              }),
+            );
+          } else if (command?.kind === 'action') {
+            if (command.action === 'voice.stop') payload = textPayload(voice.stop(ctx));
+            else if (command.action === 'voice.leave') payload = textPayload(voice.leave(ctx));
+            else if (command.action === 'voice.consent' && request.toLowerCase().startsWith('revoke'))
+              payload = textPayload(voice.consent(ctx, false, false));
+            else {
+              if (!publicConversationAction(registry.get(command.action))) await preparePrivateDelivery();
+              const outcome = await registry.request(ctx, command.action, command.input);
+              rememberConversationActions(ctx, outcome.status === 'confirmation' ? [outcome] : []);
+              payload = outcomePayload(outcome);
+            }
+          } else {
+            const approval = await handleConversationAction(ctx, request, registry, {
+              allowAction: (id) =>
+                (registry.hasConfirmationPolicy() && registry.confirmationChannelId(ctx) === ctx.channelId) ||
+                publicConversationAction(registry.get(id)),
             });
-            rememberConversationActions(ctx, reply.pending);
-            payload = aiPayload(reply);
+            if (approval.handled) payload = conversationPayload(approval);
+            else {
+              const attachment = message.attachments?.first?.();
+              const reply = await ai.chat(
+                ctx,
+                request,
+                attachment
+                  ? { url: attachment.url, name: attachment.name, contentType: attachment.contentType }
+                  : undefined,
+                true,
+                {
+                  memoryScope: 'public-mention',
+                  usePreferences: false,
+                  retainHistory: true,
+                  historyTtlSeconds: 600,
+                  timeZone: config.timeZone,
+                  responsePrivacy: 'public',
+                  allowPrivateActions: true,
+                  preparePrivateDelivery,
+                  allowWebSearch: /\b(?:search|look up|find|link|latest|weather|today|news)\b/i.test(request),
+                },
+              );
+              rememberConversationActions(ctx, reply.pending);
+              payload = aiPayload(reply);
+            }
           }
         }
       } catch (error) {
         logger.error('message.request.failed', error);
         payload = textPayload(userFacingError(error));
       }
-      await message.reply({ ...payload, allowedMentions: NO_MENTIONS });
+      if (privateReply) {
+        await privateReply.edit({ ...payload, allowedMentions: NO_MENTIONS });
+        await message.reply({ content: 'I sent the result to your DMs.', allowedMentions: NO_MENTIONS });
+      } else await message.reply({ ...payload, allowedMentions: NO_MENTIONS });
     };
     if (addressed) await withTyping(message.channel, process);
     else await process();

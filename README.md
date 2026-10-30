@@ -22,7 +22,7 @@
 
 Vibe is a self-hosted Discord bot with typed server actions, configurable moderation, community workflows, OpenAI assistance and consent-based voice. It runs as one Node.js process with SQLite and bounded workers for expensive jobs. Optional integrations stay unavailable until their required configuration is supplied.
 
-**Verified snapshot · October 29, 2026:** 697 registered actions, 909 mapped requirement items and **1,304 passing tests**. Requirement items overlap; they are not 909 separate commands. The [capability audit](docs/CAPABILITIES.md), [action schemas](docs/actions.json) and [verification record](docs/VERIFICATION.md) show the implementation, setup requirements and checks behind these numbers. This snapshot does not guarantee access to every live Discord or provider feature.
+**Verified snapshot · October 30, 2026:** 699 registered actions, 909 mapped requirement items and **1,388 passing tests**. Requirement items overlap; they are not 909 separate commands. The [capability audit](docs/CAPABILITIES.md), [action schemas](docs/actions.json) and [verification record](docs/VERIFICATION.md) show the implementation, setup requirements and checks behind these numbers. This snapshot does not guarantee access to every live Discord or provider feature.
 
 ## What Vibe brings
 
@@ -35,7 +35,7 @@ Vibe is a self-hosted Discord bot with typed server actions, configurable modera
 | **Voice**                 | Local Whisper transcription, name-addressed requests, related follow-ups, streamed Realtime replies and private transcripts.                                                      |
 | **Files and media**       | Bounded image, PDF, Office and audio/video processing, plus optional provider integrations.                                                                                       |
 
-Ordinary explicit requests run directly in `CONFIRMATION_MODE=smart`. Destructive or privileged changes get one expiring preview. Say **confirm** in the same conversation, or use `/confirm`, to approve real pending work. Current permissions and role hierarchy are checked again before execution. [How confirmations work →](docs/CONFIRMATIONS.md)
+Mention Vibe with ordinary language to request any available action; slash commands remain alternatives. Ordinary authorized requests run directly in `CONFIRMATION_MODE=smart`. Required approvals go only to the private **#bot-confirmations** channel, where a human with a role strictly above Vibe can approve or reject. Current requester permissions and reviewer hierarchy are checked again before execution. Private action results from mentions go to the requester’s DMs. [How confirmations work →](docs/CONFIRMATIONS.md)
 
 ## Quickstart
 

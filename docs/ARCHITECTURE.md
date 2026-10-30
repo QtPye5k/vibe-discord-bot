@@ -4,7 +4,7 @@ Vibe is a TypeScript modular monolith on Node.js 24. One primary process owns th
 
 This design keeps installation portable and lets server tools share the same authorization, persistence and delivery rules. It does not require Redis, an external vector store or a fleet of workers. Running multiple primary processes against one database, adding sharding or distributing the scheduler requires a separate ownership/coordination design.
 
-The **October 29, 2026 verification snapshot** records 697 registered actions, 909 mapped requirement items and 1,304 passing tests. Counts describe that checked build; account access and production acceptance remain separate. See [capabilities](CAPABILITIES.md) and [verification](VERIFICATION.md).
+The **October 30, 2026 verification snapshot** records 699 registered actions, 909 mapped requirement items and 1,388 passing tests. Counts describe that checked build; account access and production acceptance remain separate. See [capabilities](CAPABILITIES.md) and [verification](VERIFICATION.md).
 
 ## Runtime map
 
@@ -64,13 +64,14 @@ flowchart LR
   Access --> Decision{Confirmation policy}
   Decision -->|Ordinary explicit request in smart mode| Execute[Execute typed action]
   Decision -->|Privileged or destructive change| Preview[Persist exact expiring preview]
-  Preview --> Confirm[Same user, guild and channel approval]
-  Confirm --> Recheck[Reauthorize and claim once]
+  Preview --> Staff[Private bot-confirmations channel]
+  Staff --> Confirm[Human reviewer with role above Vibe]
+  Confirm --> Recheck[Recheck requester and reviewer then claim once]
   Recheck --> Execute
   Execute --> Receipt[Actual result and audit metadata]
 ```
 
-`smart` is the application default. `always` requests a preview before every write. Natural confirmation language resolves real pending IDs from the same conversation; model prose alone cannot create an approvable operation. A confirmation is claimed atomically before its effect, preventing repeated clicks from executing the same preview twice. Multi-step plans and approval chains use a shared plan engine and retain actual completion information when later delivery fails. See [confirmations](CONFIRMATIONS.md).
+`smart` is the application default. `always` requests a preview before every write. Required previews and buttons go only to the dedicated private staff channel. Reviewers must currently hold a role strictly above Vibe; execution retains the original requester’s authority. Model prose alone cannot create an approvable operation. A confirmation is claimed atomically before its effect, preventing repeated clicks from executing the same preview twice. Requester-only results are delivered privately, with safe status receipts for reviewers. Multi-step plans and approval chains retain actual completion information when later delivery fails. See [confirmations](CONFIRMATIONS.md).
 
 Automatic policies are an explicit second execution path. Configured spam removal, honeypot bans, welcome messages and scheduled workflows run from observed events or durable jobs without another per-event approval. Their handlers recheck current policy and relevant permissions before effects. Historical cleanup uses its own typed action and never applies honeypot bans to old posts. This distinction matters: not every Gateway effect is an interactive registry request.
 
@@ -102,7 +103,7 @@ Local STT runs in one lazy ESM worker with transferred mono 16 kHz samples, boun
 
 Transcript delivery requires a dedicated private text channel with an explicit @everyone visibility denial and restricted access. There is no public fallback. Cache leases guard streaming chunks; forced checks guard stream boundaries and mutations. Voice stages have cancellation/deadline bounds, and late results cannot authorize a new effect. See [voice](VOICE.md), [private transcripts](VOICE_TRANSCRIPTS.md) and [local transcription](LOCAL_TRANSCRIPTION.md).
 
-Private assistant history, public chat and voice conversation history use distinct scopes. Public-safe tools exclude private account links/exports, and public/voice context does not import private preferences. `/forget` removes supported AI records, invalidates pending results and resets the speaker’s provider/conversation state. Provider-side retention is separate from deletion in the local database.
+Private assistant history, public chat and voice conversation history use distinct scopes. Mention requests can discover all available actions; private operations first establish requester DM delivery and exclude their results from shared history. Audible voice tools retain public-result restrictions, and public/voice context does not import private preferences. `/forget` removes supported AI records, invalidates pending results and resets the speaker’s provider/conversation state. Provider-side retention is separate from deletion in the local database.
 
 ## Persistence and delivery
 

@@ -25,6 +25,8 @@ const publicWrites = new Set([
   'moderation.history.clean',
   'message.send',
   'media.search-send',
+  'media.generate-send',
+  'media.link-send',
   'guild.edit',
   'guild.visual',
   'guild.system-flags',
@@ -72,6 +74,8 @@ export interface AiContextOptions {
   timeZone?: string;
   responseStyle?: 'voice' | 'text';
   responsePrivacy?: 'public' | 'private';
+  /** The adapter can deliver private action results directly to the requester. */
+  allowPrivateActions?: boolean;
 }
 /** A trailing dictation cue supplies no message body; terminal punctuation is not content. */
 export function requiresMessageContent(prompt: string): boolean {
@@ -188,18 +192,27 @@ export function conversationContext(
         .listAvailable()
         .filter(
           (action) =>
-            !action.id.startsWith('ai.') &&
-            (options.responsePrivacy !== 'public' || publicConversationAction(action)),
+            options.allowPrivateActions ||
+            options.responsePrivacy !== 'public' ||
+            publicConversationAction(action),
         )
     : [];
   const selected: string[] = [];
   const interpretationHints: string[] = [];
   if (/\b(?:gif|gifs|images?|pictures?|photos?)\b/i.test(prompt)) {
-    selected.push(/\bgifs?\b/i.test(prompt) ? 'gif.search' : 'image.search', 'media.search-send');
+    if (/\b(?:generate|create|draw|design|make)\b/i.test(prompt) && !/\bgifs?\b/i.test(prompt))
+      selected.push('media.generate-send');
+    selected.push(
+      /\bgifs?\b/i.test(prompt) ? 'gif.search' : 'image.search',
+      'media.search-send',
+      'media.link-send',
+    );
     interpretationHints.push(
-      'For a request to find/send an image or GIF, use image.search or gif.search with the subject, then media.search-send with an exact returned selection and the requested visible channelId. Do not ask the user to attach a file when they asked you to find media. For a general request choose a relevant result; if there are no results, try one ordinary synonym (bunny/rabbit) then explain the catalog limitation. Never invent a media file, URL, selection ID or successful send. Commons is the configured free catalog; do not claim a Tenor/Giphy integration.',
+      'For a request to generate/draw/create an image, use media.generate-send with the prompt and requested channelId. For find/send image or GIF requests, use image.search or gif.search, then media.search-send with an exact returned selection and requested channelId. Select provider klipy or pinterest when explicitly requested; never silently substitute another catalog. These providers require their configured credentials and access. A supplied Pinterest Pin or Klipy link can use media.link-send without scraping or inventing media. Do not ask for an attachment when the user asked you to find or generate media. Choose a relevant result for a general request; if none, try one synonym then explain the catalog limitation. Never invent a URL, selection ID or successful send.',
     );
   }
+  if (/\b(?:klipy|pinterest)\b/i.test(prompt))
+    selected.unshift('gif.search', 'image.search', 'media.link-send');
   const roleColorRequest =
     /\b(?:roles?|rules?)\b/i.test(prompt) &&
     /\b(?:change|edit|set|colou?r|purple|red|blue|green|pink|yellow|orange|violet|teal|cyan|gold|silver)\b/i.test(
@@ -268,6 +281,8 @@ export function conversationContext(
     realPendingConfirmations: pending,
     knownActionSchemas: commonActions,
     interpretationHints,
+    actionInterface:
+      'All available typed actions can be requested in ordinary language. Use find_actions and action_schema as needed. Slash commands remain optional. Private action results are delivered by DM when this adapter supports it; required approvals go only to the dedicated staff confirmation channel.',
     requiresMessageContent: requiresMessageContent(prompt),
     responseStyle: options.responseStyle || 'text',
   });
@@ -294,19 +309,25 @@ const synonyms: Record<string, string[]> = {
   rules: ['role'],
   purple: ['role', 'edit', 'color'],
   colour: ['color', 'role', 'edit'],
+  remind: ['reminder', 'create'],
+  timeout: ['member', 'moderation'],
+  penalty: ['timeout', 'moderation'],
+  picture: ['image', 'media'],
+  draw: ['generate', 'image'],
+  klipy: ['gif', 'search'],
+  pinterest: ['image', 'search', 'link'],
 };
 export function findConversationActions(
   registry: ActionRegistry,
   query: string,
   privacy: AiContextOptions['responsePrivacy'],
+  allowPrivateActions = false,
 ) {
   const words = query.toLowerCase().match(/[a-z0-9_.-]+/g) ?? [];
   const terms = [...new Set(words.flatMap((word) => [word, ...(synonyms[word] ?? [])]))];
   return registry
     .listAvailable()
-    .filter(
-      (action) => !action.id.startsWith('ai.') && (privacy !== 'public' || publicConversationAction(action)),
-    )
+    .filter((action) => allowPrivateActions || privacy !== 'public' || publicConversationAction(action))
     .map((action) => {
       const text = `${action.id} ${action.description}`.toLowerCase();
       return {

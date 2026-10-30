@@ -22,7 +22,9 @@ const G = '890000000000000001',
   TRANSCRIPTS = '890000000000000004',
   ORIGIN = '890000000000000005',
   VOICE = '890000000000000006',
-  BOT_ROLE = '890000000000000007';
+  BOT_ROLE = '890000000000000007',
+  APPROVALS = '890000000000000008',
+  STAFF_ROLE = '890000000000000009';
 
 function fixture(t: TestContext) {
   const services = createServices(
@@ -32,6 +34,7 @@ function fixture(t: TestContext) {
       VOICE_TRANSCRIPTION_BACKEND: 'openai',
       VOICE_TRANSCRIPT_CHANNEL_ID: TRANSCRIPTS,
       CONFIRMATION_MODE: 'smart',
+      CONFIRMATION_CHANNEL_ID: APPROVALS,
     }),
     { store: new Store(':memory:') },
   );
@@ -40,11 +43,28 @@ function fixture(t: TestContext) {
   services.logger.info = () => undefined;
   Object.defineProperty(services.client, 'user', { value: { id: B }, configurable: true });
 
-  const everyone = { id: G, managed: false, permissions: new PermissionsBitField(0n) },
-    managed = { id: BOT_ROLE, managed: true, tags: { botId: B } },
+  const rolePosition = function (this: { position: number }, other: { position: number }) {
+    return this.position - other.position;
+  };
+  const everyone = {
+      id: G,
+      position: 0,
+      comparePositionTo: rolePosition,
+      managed: false,
+      permissions: new PermissionsBitField(0n),
+    },
+    managed = {
+      id: BOT_ROLE,
+      position: 5,
+      comparePositionTo: rolePosition,
+      managed: true,
+      tags: { botId: B },
+    },
+    staff = { id: STAFF_ROLE, position: 10, comparePositionTo: rolePosition, managed: false },
     roles = new Collection<string, Role>([
-      [G, everyone as Role],
-      [BOT_ROLE, managed as Role],
+      [G, everyone as unknown as Role],
+      [BOT_ROLE, managed as unknown as Role],
+      [STAFF_ROLE, staff as unknown as Role],
     ]),
     guildRef = { id: G },
     member = {
@@ -53,14 +73,17 @@ function fixture(t: TestContext) {
       user: { id: U, bot: false },
       voice: { channelId: VOICE },
       permissions: new PermissionsBitField(P.Administrator),
-      roles: { cache: new Collection<string, Role>() },
+      roles: {
+        highest: staff,
+        cache: new Collection<string, Role>([[STAFF_ROLE, staff as unknown as Role]]),
+      },
     },
     bot = {
       id: B,
       guild: guildRef,
       user: { id: B, bot: true },
       permissions: new PermissionsBitField(P.Administrator),
-      roles: { cache: new Collection([[BOT_ROLE, managed]]) },
+      roles: { highest: managed, cache: new Collection([[BOT_ROLE, managed]]) },
     };
   const overwrite = (visible = false) => ({
     id: G,
@@ -104,6 +127,28 @@ function fixture(t: TestContext) {
       state.sends.push({ channelId: ORIGIN, payload });
     },
   };
+  const approvalChannel = {
+    ...channel,
+    id: APPROVALS,
+    name: 'bot-confirmations',
+    permissionOverwrites: {
+      cache: new Collection([
+        [G, overwrite()],
+        [
+          STAFF_ROLE,
+          {
+            id: STAFF_ROLE,
+            type: OverwriteType.Role,
+            allow: new PermissionsBitField(P.ViewChannel),
+            deny: new PermissionsBitField(),
+          },
+        ],
+      ]),
+    },
+    send: async (payload: unknown) => {
+      state.sends.push({ channelId: APPROVALS, payload });
+    },
+  };
   let freshlyFetched: typeof channel | undefined;
   const guild = {
     id: G,
@@ -123,12 +168,20 @@ function fixture(t: TestContext) {
       cache: new Collection([
         [TRANSCRIPTS, channel],
         [ORIGIN, publicChannel],
+        [APPROVALS, approvalChannel],
       ]),
       fetch: async (id: string, options: { force: boolean }) => {
         assert.equal(options.force, true);
         state.calls.push(id);
-        if (state.calls.length === 2) state.beforeDelivery?.();
-        return id === TRANSCRIPTS ? (freshlyFetched ?? channel) : id === ORIGIN ? publicChannel : null;
+        if (state.calls.length === 2 && state.calls.every((value) => value === TRANSCRIPTS))
+          state.beforeDelivery?.();
+        return id === TRANSCRIPTS
+          ? (freshlyFetched ?? channel)
+          : id === ORIGIN
+            ? publicChannel
+            : id === APPROVALS
+              ? approvalChannel
+              : null;
       },
     },
   } as unknown as Guild;
@@ -181,16 +234,21 @@ function fixture(t: TestContext) {
   };
 }
 
-test('The voice planner uses public-scoped tools and delivers a real preview only to the private transcript channel', async (t) => {
+test('The voice planner routes real approval prompts only to the staff channel and sends only a location to private transcripts', async (t) => {
   const f = fixture(t);
   const reply = await f.options.reply!(f.ctx, 'Delete the selected channel');
   assert.deepEqual(reply, { text: 'Please confirm the selected deletion.', followUp: 'confirmation' });
   assert.equal(f.state.aiCalls, 1);
   assert.deepEqual(f.state.calls, [TRANSCRIPTS, TRANSCRIPTS]);
-  assert.equal(f.state.sends.length, 1);
-  assert.equal(f.state.sends[0]!.channelId, TRANSCRIPTS);
-  assert.match(String((f.state.sends[0]!.payload as { content: string }).content), /Awaiting confirmation/);
-  assert.deepEqual(f.remembered()?.ids, [f.state.pendingId]);
+  assert.equal(f.state.sends.length, 2);
+  assert.equal(f.state.sends[0]!.channelId, APPROVALS);
+  assert.match(String((f.state.sends[0]!.payload as { content: string }).content), /Approval required/);
+  assert.equal(f.state.sends[1]!.channelId, TRANSCRIPTS);
+  const transcript = f.state.sends[1]!.payload as { content: string; components: unknown[] };
+  assert.match(transcript.content, new RegExp(APPROVALS));
+  assert.doesNotMatch(transcript.content, /Approval required|channel.delete|"channelId"/);
+  assert.deepEqual(transcript.components, []);
+  assert.deepEqual(f.remembered()?.ids, []);
 });
 
 test('Revoking a voice lease during the final forced destination fetch prevents delivery and confirmation memory', async (t) => {
@@ -200,7 +258,10 @@ test('Revoking a voice lease during the final forced destination fetch prevents 
   };
   await assert.rejects(f.options.reply!(f.ctx, 'Delete the selected channel'), /expired|cancelled/);
   assert.deepEqual(f.state.calls, [TRANSCRIPTS, TRANSCRIPTS]);
-  assert.deepEqual(f.state.sends, []);
+  assert.deepEqual(
+    f.state.sends.map((item) => item.channelId),
+    [APPROVALS],
+  );
   assert.equal(f.remembered(), undefined);
 });
 
@@ -212,7 +273,10 @@ test('A transcript destination made public during its final forced fetch cannot 
     /explicitly deny View Channel/,
   );
   assert.deepEqual(f.state.calls, [TRANSCRIPTS, TRANSCRIPTS]);
-  assert.deepEqual(f.state.sends, []);
+  assert.deepEqual(
+    f.state.sends.map((item) => item.channelId),
+    [APPROVALS],
+  );
   assert.equal(f.remembered(), undefined);
 });
 

@@ -11,6 +11,7 @@ import { imageOperationSchema, imageFilterStepSchema, runMediaJob, type MediaFil
 import { runFileJob } from './files.js';
 import { processAudioMedia } from './audio-media.js';
 import type { AiService } from './ai.js';
+import { registerMediaPostingActions } from './media-posting.js';
 
 const id = z.string().regex(/^\d{17,20}$/),
   color = z.string().regex(/^#[a-fA-F0-9]{6}$/),
@@ -106,6 +107,7 @@ export function registerMediaWorkflowActions(
   registry: ActionRegistry,
   options: { ai?: AiService; download?: typeof downloadAttachment } = {},
 ): void {
+  registerMediaPostingActions(registry, options);
   const download = options.download ?? downloadAttachment;
   registry.register({
     ...base,
@@ -439,6 +441,13 @@ export function registerMediaWorkflowActions(
         image: `data:image/png;base64,${file.attachment.toString('base64')}`,
         roleIds: input.roleIds,
       });
+      if (outcome.status === 'confirmation' && outcome.approvalChannelId)
+        return {
+          status: 'approval-routed',
+          approvalChannelId: outcome.approvalChannelId,
+          notice:
+            'The prepared emoji is awaiting staff approval in the private confirmation channel. It has not been created.',
+        };
       return outcome.status === 'confirmation' ? registry.confirm(ctx, outcome.id) : outcome;
     },
   });
@@ -472,6 +481,13 @@ export function registerMediaWorkflowActions(
         contentType: 'audio/mpeg',
         volume: input.volume,
       });
+      if (outcome.status === 'confirmation' && outcome.approvalChannelId)
+        return {
+          status: 'approval-routed',
+          approvalChannelId: outcome.approvalChannelId,
+          notice:
+            'The prepared soundboard clip is awaiting staff approval in the private confirmation channel. It has not been created.',
+        };
       return outcome.status === 'confirmation' ? registry.confirm(ctx, outcome.id) : outcome;
     },
   });

@@ -64,7 +64,11 @@ function view(chain: Chain) {
   };
 }
 /** The existing plan runner calls this before claiming, before child request and before child confirmation. */
-export async function assertPlanApprovals(ctx: ActionContext, plan: AiPlan): Promise<void> {
+export async function assertPlanApprovals(
+  ctx: ActionContext,
+  plan: AiPlan,
+  registry?: ActionRegistry,
+): Promise<void> {
   const rowKey = chainKey(plan.guildId, plan.userId, plan.id),
     initial = ctx.store.get<Chain>('approval.chains', rowKey);
   if (!initial) return;
@@ -87,6 +91,17 @@ export async function assertPlanApprovals(ctx: ActionContext, plan: AiPlan): Pro
       const reviewer = await ctx.guild.members.fetch({ user: userId, force: true });
       if (reviewer.user.bot || !reviewer.roles.cache.has(stage.roleId))
         throw new UserError('A reviewer no longer holds the required role.');
+      if (registry?.hasConfirmationPolicy()) {
+        const channelId = registry.confirmationChannelId(ctx);
+        if (!channelId) throw new UserError('The dedicated confirmation channel is unavailable.');
+        await registry.assertConfirmationAuthority({
+          client: ctx.client,
+          guild: ctx.guild,
+          store: ctx.store,
+          member: reviewer,
+          channelId,
+        });
+      }
       const channel = await resolveChannel({ ...ctx, member: reviewer }, initial.channelId);
       if (!channel.permissionsFor(reviewer)?.has(P.ReadMessageHistory))
         throw new UserError('A reviewer lost access to the reviewed plan context.');
@@ -166,9 +181,11 @@ export function registerApprovalChainActions(registry: ActionRegistry) {
     schema: z.strictObject({ ownerId: id, planId: slug }),
     execute: async (ctx, input) => {
       ctx = await freshContext(ctx);
+      ctx = await registry.assertConfirmationAuthority(ctx);
       const { row } = chainFor(ctx, input.ownerId, input.planId);
       assertAudience(ctx, row);
-      if (row.channelId !== ctx.channelId) throw new UserError('Review this plan in its original channel.');
+      if (!registry.hasConfirmationPolicy() && row.channelId !== ctx.channelId)
+        throw new UserError('Review this plan in its original channel.');
       const channel = await resolveChannel(ctx, row.channelId);
       if (!channel.permissionsFor(ctx.member)?.has(P.ReadMessageHistory))
         throw new UserError('Current message history access required.');
@@ -190,9 +207,11 @@ export function registerApprovalChainActions(registry: ActionRegistry) {
     }),
     execute: async (ctx, input) => {
       ctx = await freshContext(ctx);
+      ctx = await registry.assertConfirmationAuthority(ctx);
       const { key, row } = chainFor(ctx, input.ownerId, input.planId);
       if (row.ownerId === ctx.member.id) throw new UserError('You cannot approve your own plan.');
-      if (row.channelId !== ctx.channelId) throw new UserError('Use the original review channel.');
+      if (!registry.hasConfirmationPolicy() && row.channelId !== ctx.channelId)
+        throw new UserError('Use the original review channel.');
       if (
         row.planHash !== input.planHash ||
         row.expiresAt <= Date.now() ||
@@ -212,6 +231,13 @@ export function registerApprovalChainActions(registry: ActionRegistry) {
       const latest = chainFor(ctx, input.ownerId, input.planId).row;
       if (JSON.stringify(latest) !== JSON.stringify(row) || row.expiresAt <= Date.now())
         throw new UserError('The chain changed or expired during your review.');
+      ctx = await registry.assertConfirmationAuthority(ctx);
+      const afterAuthority = chainFor(ctx, input.ownerId, input.planId).row;
+      if (JSON.stringify(afterAuthority) !== JSON.stringify(row) || row.expiresAt <= Date.now())
+        throw new UserError('The chain changed or expired during your review.');
+      if (!ctx.member.roles.cache.has(row.stages[index]!.roleId))
+        throw new UserError('Your current roles cannot approve this stage.');
+      currentPlan(ctx, row);
       if (!input.approve) {
         row.state = 'rejected';
         row.rejectedBy = ctx.member.id;

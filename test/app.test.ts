@@ -38,6 +38,8 @@ function fixture(t: TestContext, env: NodeJS.ProcessEnv = {}) {
   const services = createServices(loadConfig({ ...env, ENABLE_VOICE: 'true', DATABASE_PATH: ':memory:' }), {
     store: new Store(':memory:'),
   });
+  // Routing tests use a standalone registry; dedicated approval authorization has its own Discord fixture.
+  services.registry.setConfirmationPolicy(undefined);
   services.logger.error = () => undefined;
   services.logger.info = () => undefined;
   const bot = { id: BOT, permissions: new PermissionsBitField(P.Administrator) };
@@ -615,7 +617,7 @@ test('Message context explanations disable AI action execution', async (t) => {
   assert.equal(content(result), 'Explanation');
 });
 
-test('Public prefix action requests cannot return private form results or dashboard credentials', async (t) => {
+test('Public prefix private actions require working DM delivery before execution', async (t) => {
   const f = fixture(t, { ENABLE_MESSAGE_CONTENT: 'true', COMMAND_PREFIX: '!' });
   f.bind();
   Object.defineProperty(f.services.client, 'user', { value: { id: BOT }, configurable: true });
@@ -632,7 +634,7 @@ test('Public prefix action requests cannot return private form results or dashbo
     };
     f.services.client.emit(Events.MessageCreate, message as unknown as ClientEvents[Events.MessageCreate][0]);
   });
-  assert.match(content(result), /Use \/action/);
+  assert.match(content(result), /Enable direct messages/);
   assert.deepEqual(requests, []);
 });
 
@@ -667,6 +669,53 @@ test('Public mention AI permits scoped server actions with isolated short-lived 
   });
   assert.equal(calls, 1);
   assert.equal(content(result), 'Public response');
+});
+
+test('Mention utility actions deliver private results through DM without using slash commands or AI', async (t) => {
+  const f = fixture(t);
+  f.bind();
+  Object.defineProperty(f.services.client, 'user', { value: { id: BOT }, configurable: true });
+  const requests = spyRequests(f.services),
+    privateResults: unknown[] = [];
+  f.services.ai.chat = async () => {
+    throw new Error('Exact utility command must not call AI');
+  };
+  const request = fakeMessage(f.guild, `<@${BOT}> status`);
+  Object.assign(request.message.author, {
+    send: async () => ({
+      edit: async (payload: unknown) => {
+        privateResults.push(payload);
+      },
+    }),
+  });
+  f.services.client.emit(Events.MessageCreate, request.message);
+  const result = await request.finished;
+  assert.deepEqual(requests, [{ id: 'system.status', input: {} }]);
+  assert.match(content(privateResults[0]), /system.status/);
+  assert.equal(content(result), 'I sent the result to your DMs.');
+  assert(!content(result).includes('system.status'));
+});
+
+test('Mention AI private replies are edited into the proved DM and never copied to the server channel', async (t) => {
+  const f = fixture(t);
+  f.bind();
+  Object.defineProperty(f.services.client, 'user', { value: { id: BOT }, configurable: true });
+  const privateResults: unknown[] = [];
+  f.services.ai.chat = async (_ctx, _prompt, _attachment, _allow, options) => {
+    await options!.preparePrivateDelivery!();
+    return { text: 'Private account result', pending: [], privateResponse: true };
+  };
+  const request = fakeMessage(f.guild, `<@${BOT}> show my account records`);
+  Object.assign(request.message.author, {
+    send: async () => ({
+      edit: async (payload: unknown) => {
+        privateResults.push(payload);
+      },
+    }),
+  });
+  f.services.client.emit(Events.MessageCreate, request.message);
+  assert.equal(content(await request.finished), 'I sent the result to your DMs.');
+  assert.equal(content(privateResults[0]), 'Private account result');
 });
 
 test('An explicit ordinary /action write executes once in smart mode without an extra preview', async (t) => {

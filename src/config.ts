@@ -29,6 +29,14 @@ const settings = z.object({
     .refine((value) => !/[\u0000-\u001f\u007f<>]/.test(value), 'Bot name must be plain single-line text')
     .default('Vibe'),
   confirmationMode: z.enum(['smart', 'always']).default('smart'),
+  confirmationChannelId: z
+    .string()
+    .regex(/^(?:\d{17,20})?$/)
+    .default(''),
+  confirmationChannelName: z
+    .string()
+    .regex(/^[a-z0-9_-]{1,100}$/)
+    .default('bot-confirmations'),
   timeZone: z
     .string()
     .default('America/New_York')
@@ -137,6 +145,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const config = settings.parse({
     botName: env.BOT_NAME || undefined,
     confirmationMode: env.CONFIRMATION_MODE || undefined,
+    confirmationChannelId: env.CONFIRMATION_CHANNEL_ID,
+    confirmationChannelName: env.CONFIRMATION_CHANNEL_NAME || undefined,
     timeZone: env.BOT_TIME_ZONE || undefined,
     optionalEnvironment: Object.fromEntries(
       [...OPTIONAL_INTEGRATION_FIELDS, ...ADDITIONAL_SERVICE_FIELDS].flatMap((field) =>

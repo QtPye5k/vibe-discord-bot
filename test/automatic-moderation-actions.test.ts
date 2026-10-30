@@ -23,7 +23,7 @@ const G = '920000000000000001',
   OTHER = '920000000000000006';
 function fixture(t: TestContext, hostEnabled = true) {
   const store = new Store(':memory:'),
-    state = { userBan: true, botBan: true, fetches: 0 };
+    state = { userBan: true, botBan: true, userModerate: true, botModerate: true, fetches: 0 };
   const everyone = { id: G },
     roles = new Collection([[G, everyone]]);
   const member = {
@@ -31,14 +31,21 @@ function fixture(t: TestContext, hostEnabled = true) {
       user: { id: USER, bot: false },
       roles: { cache: new Collection() },
       get permissions() {
-        return new PermissionsBitField([P.ManageGuild, ...(state.userBan ? [P.BanMembers] : [])]);
+        return new PermissionsBitField([
+          P.ManageGuild,
+          ...(state.userBan ? [P.BanMembers] : []),
+          ...(state.userModerate ? [P.ModerateMembers] : []),
+        ]);
       },
     },
     bot = {
       id: BOT,
       roles: { cache: new Collection() },
       get permissions() {
-        return new PermissionsBitField(state.botBan ? [P.BanMembers] : []);
+        return new PermissionsBitField([
+          ...(state.botBan ? [P.BanMembers] : []),
+          ...(state.botModerate ? [P.ModerateMembers] : []),
+        ]);
       },
     };
   const makeChannel = (id: string) => ({
@@ -90,11 +97,8 @@ function fixture(t: TestContext, hostEnabled = true) {
       throw new Error('No classifier requests are expected');
     },
   });
-  registerAutomaticModerationActions(
-    registry,
-    service,
-    loadConfig({ DATABASE_PATH: ':memory:', AUTO_MODERATION_ENABLED: String(hostEnabled) }),
-  );
+  const config = loadConfig({ DATABASE_PATH: ':memory:', AUTO_MODERATION_ENABLED: String(hostEnabled) });
+  registerAutomaticModerationActions(registry, service, config);
   t.after(async () => {
     await service.close();
     store.close();
@@ -105,7 +109,7 @@ function fixture(t: TestContext, hostEnabled = true) {
     if (outcome.status !== 'confirmation') throw new Error('Expected one exact policy preview');
     return { preview: outcome, confirm: () => registry.confirm(ctx, outcome.id) };
   };
-  return { store, state, ctx, registry, configure };
+  return { store, state, ctx, registry, configure, config };
 }
 
 test('Smart mode still requires one exact policy confirmation, writes only reviewed input and rejects replay', async (t) => {
@@ -194,4 +198,32 @@ test('Status returns at most 25 recent cases from only the requesting guild', as
   assert.equal(data.recentCases[0]!.id, 'case-29');
   assert.equal(data.classifierConfigured, false);
   assert(!JSON.stringify(data).includes('OTHER_GUILD_PRIVATE_CASE'));
+});
+
+test('Progressive content penalties require both current Moderate Members and Ban Members authority', async (t) => {
+  for (const principal of ['userModerate', 'botModerate', 'userBan', 'botBan'] as const)
+    await t.test(principal, async (sub) => {
+      const f = fixture(sub);
+      f.config.openaiKey = 'test'.repeat(8);
+      f.state[principal] = false;
+      const request = await f.configure({ enabled: true, textEnabled: true, logChannelId: LOG });
+      await assert.rejects(request.confirm(), /Moderate Members and Ban Members/);
+      assert.equal(f.store.get('moderation.automatic', G), undefined);
+    });
+});
+
+test('An exact escalation-only policy patch preserves existing unrelated server settings', async (t) => {
+  const f = fixture(t);
+  f.config.openaiKey = 'test'.repeat(8);
+  const old = moderationPolicySchema.parse({
+    enabled: true,
+    textEnabled: false,
+    imagesEnabled: true,
+    honeypotChannelId: HONEY,
+    logChannelId: LOG,
+  });
+  f.store.set('moderation.automatic', G, old);
+  const request = await f.configure({ explicitEscalationEnabled: false });
+  await request.confirm();
+  assert.deepEqual(f.store.get('moderation.automatic', G), { ...old, explicitEscalationEnabled: false });
 });

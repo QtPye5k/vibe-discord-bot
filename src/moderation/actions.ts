@@ -6,12 +6,14 @@ import { resolveChannel } from '../core/permissions.js';
 import { UserError } from '../core/errors.js';
 import { assertPrivateTranscriptPrivacy } from '../voice/transcripts.js';
 import { moderationPolicySchema, type createAutomaticModeration } from './service.js';
+import { EXPLICIT_STRIKES, EXPLICIT_VIOLATIONS, type ExplicitStrikeCount } from './penalties.js';
 
 const snowflake = z.string().regex(/^\d{17,20}$/);
 const patch = z.strictObject({
   enabled: z.boolean().optional(),
   textEnabled: z.boolean().optional(),
   imagesEnabled: z.boolean().optional(),
+  explicitEscalationEnabled: z.boolean().optional(),
   honeypotChannelId: snowflake.nullable().optional(),
   logChannelId: snowflake.nullable().optional(),
 });
@@ -41,14 +43,29 @@ export function registerAutomaticModerationActions(
         )
         .all(ctx.guild.id)
         .map((row) => JSON.parse(String(row.value)) as unknown),
+      explicitStrikes: ctx.store.db
+        .prepare(
+          'SELECT key,value FROM kv WHERE namespace=? AND key>=? AND key<? ORDER BY updated_at DESC LIMIT 100',
+        )
+        .all(EXPLICIT_STRIKES, `${ctx.guild.id}:`, `${ctx.guild.id};`)
+        .map((row) => ({
+          userId: String(row.key).slice(ctx.guild.id.length + 1),
+          ...(JSON.parse(String(row.value)) as ExplicitStrikeCount),
+        })),
+      recentExplicitPenalties: ctx.store.db
+        .prepare(
+          'SELECT value FROM kv WHERE namespace=? AND key>=? AND key<? ORDER BY updated_at DESC LIMIT 25',
+        )
+        .all(EXPLICIT_VIOLATIONS, `${ctx.guild.id}:`, `${ctx.guild.id};`)
+        .map((row) => JSON.parse(String(row.value)) as unknown),
       notice:
-        'Honeypot posts automatically ban eligible accounts. Explicit content is deleted, not banned. Owner and Discord role hierarchy restrictions still apply.',
+        'Honeypot posts automatically ban eligible accounts. Explicit violations below the bot role progress through warning, 5/15/30 minute timeouts, then a permanent ban on the fifth. Owner and Discord role hierarchy restrictions still apply.',
     }),
   });
   registry.register({
     id: 'moderation.automatic.configure',
     description:
-      'Configure automatic explicit-content deletion and the channel whose posts trigger immediate bans; one exact policy approval.',
+      'Configure explicit-content deletion, progressive penalties and honeypot bans; one exact policy approval.',
     category: 'moderation',
     risk: 'write',
     confirmation: 'always',
@@ -68,6 +85,15 @@ export function registerAutomaticModerationActions(
       if (next.honeypotChannelId && next.honeypotChannelId === next.logChannelId)
         throw new UserError('The moderation log and honeypot must be different channels.');
       const bot = await ctx.guild.members.fetchMe({ force: true });
+      if (next.enabled && next.explicitEscalationEnabled && (next.textEnabled || next.imagesEnabled)) {
+        if (
+          !ctx.member.permissions.has([P.ModerateMembers, P.BanMembers]) ||
+          !bot.permissions.has([P.ModerateMembers, P.BanMembers])
+        )
+          throw new UserError(
+            'Both you and Vibe need Moderate Members and Ban Members to enable progressive explicit-content penalties.',
+          );
+      }
       if (next.enabled && next.honeypotChannelId) {
         if (!ctx.member.permissions.has(P.BanMembers) || !bot.permissions.has(P.BanMembers))
           throw new UserError('Both you and Vibe need Ban Members to enable the honeypot.');

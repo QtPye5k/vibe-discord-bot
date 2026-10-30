@@ -274,3 +274,49 @@ test('compressed audio decoding and fixed equalizer/compressor/effect graphs exe
     /greater than|Too big|<=12/,
   );
 });
+test('prepared media workflows route native uploads to staff approval without implicit confirmation', async (t) => {
+  const f = await fixture(t),
+    approvalChannelId = '920000000000000009',
+    published: string[] = [];
+  f.registry.setConfirmationPolicy({
+    channelId: () => approvalChannelId,
+    publish: async (_ctx, pending) => {
+      published.push(pending.action);
+    },
+    authorize: async (ctx) => {
+      if (ctx.channelId !== approvalChannelId) throw new Error('Private staff approval required');
+      return ctx;
+    },
+  });
+  const execute = async (id: string, input: unknown) => {
+    const requested = await f.registry.request(f.ctx, id, input);
+    assert.equal(requested.status, 'confirmation');
+    if (requested.status !== 'confirmation') throw new Error('Missing preview');
+    const approved = await f.registry.confirm({ ...f.ctx, channelId: approvalChannelId }, requested.id);
+    assert.equal(approved.status, 'completed');
+    return approved.status === 'completed' ? approved.result : undefined;
+  };
+  const emoji = (await execute('image.emoji.create', { url: attachment, name: 'test_emoji' })) as {
+    status: string;
+    notice: string;
+    approvalChannelId: string;
+  };
+  assert.equal(emoji.status, 'approval-routed');
+  assert.match(emoji.notice, /has not been created/);
+  assert.equal(emoji.approvalChannelId, approvalChannelId);
+  f.setSource(pcmToWav(Buffer.alloc(48000 * 4)));
+  const sound = (await execute('media.soundboard.create', {
+    url: attachment,
+    name: 'Test sound',
+    durationSeconds: 0.5,
+  })) as { status: string; notice: string };
+  assert.equal(sound.status, 'approval-routed');
+  assert.match(sound.notice, /has not been created/);
+  assert.deepEqual(published, [
+    'image.emoji.create',
+    'emoji.create',
+    'media.soundboard.create',
+    'soundboard.create',
+  ]);
+  assert.deepEqual(f.uploads, []);
+});

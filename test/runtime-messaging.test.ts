@@ -132,7 +132,7 @@ function fixture(t: TestContext) {
   };
 }
 
-test('Vibe accepts actual mentions anywhere, nickname mention syntax and leading whitespace without exposing private AI tools', async (t) => {
+test('Vibe accepts actual mentions anywhere and offers private delivery for sensitive actions', async (t) => {
   for (const [input, prompt] of [
     [`Hi <@${B}> can you help?`, 'Hi can you help?'],
     [`  <@!${B}>   Hello`, 'Hello'],
@@ -145,13 +145,16 @@ test('Vibe accepts actual mentions anywhere, nickname mention syntax and leading
         requests.push(text.replace(/\s+/g, ' ').trim());
         assert.equal(attachment, undefined);
         assert.equal(allowActions, true);
-        assert.deepEqual(options, {
+        assert.equal(typeof options?.preparePrivateDelivery, 'function');
+        const { preparePrivateDelivery: _delivery, ...publicOptions } = options ?? {};
+        assert.deepEqual(publicOptions, {
           memoryScope: 'public-mention',
           usePreferences: false,
           retainHistory: true,
           historyTtlSeconds: 600,
           timeZone: 'America/New_York',
           responsePrivacy: 'public',
+          allowPrivateActions: true,
           allowWebSearch: false,
         });
         return { text: 'Hello from Vibe', pending: [] };

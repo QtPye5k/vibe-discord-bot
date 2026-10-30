@@ -20,6 +20,26 @@ export class AiLimits {
     const user = `${guildId}:${userId}`;
     if (this.active >= this.options.maxAiConcurrent || this.users.has(user))
       throw new UserError('AI is busy. Wait for the current request to finish.');
+    this.charge(guildId, userId, now, allowance);
+    this.active++;
+    this.users.add(user);
+    let released = false;
+    return () => {
+      if (!released) {
+        released = true;
+        this.active--;
+        this.users.delete(user);
+      }
+    };
+  }
+  /** A sequential child API operation shares its parent's concurrency lease, but consumes quota. */
+  charge(
+    guildId: string,
+    userId: string,
+    now = Date.now(),
+    allowance?: { userDaily?: number; guildDaily?: number },
+  ): void {
+    const user = `${guildId}:${userId}`;
     const day = new Date(now).toISOString().slice(0, 10);
     this.store.transaction(() => {
       for (const [scope, limit] of [
@@ -36,16 +56,6 @@ export class AiLimits {
           .run(scope, day);
       }
     });
-    this.active++;
-    this.users.add(user);
-    let released = false;
-    return () => {
-      if (!released) {
-        released = true;
-        this.active--;
-        this.users.delete(user);
-      }
-    };
   }
 }
 

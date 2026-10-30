@@ -39,6 +39,7 @@ function fixture(t: TestContext) {
     deletes: [] as string[],
     bans: [] as string[],
     logs: [] as unknown[],
+    warnings: [] as unknown[],
     errors: [] as string[],
     scans: [] as Message[],
     classifier: undefined as
@@ -123,7 +124,7 @@ function fixture(t: TestContext) {
       },
     },
     send: async (payload: unknown) => {
-      state.logs.push(payload);
+      (id === LOG ? state.logs : state.warnings).push(payload);
     },
   });
   const channels = new Map([TEXT, HONEY, LOG].map((id) => [id, channel(id)]));
@@ -287,7 +288,7 @@ test('Newly populated link-preview metadata invalidates a clean result even when
       assert.equal(f.state.scans.length, 1);
     });
 });
-test('Explicit content is deleted once across duplicate events, never bans, and private records contain no raw content or image URL', async (t) => {
+test('A first explicit violation is deleted once across duplicate events without a ban, and private records contain no raw content or image URL', async (t) => {
   const f = fixture(t),
     message = f.makeMessage();
   const first = f.service.processMessage(message),
@@ -322,7 +323,11 @@ test('Explicit text and images from other bots and webhooks are scanned and remo
     const message = f.makeMessage({ webhookId, author: { id: USER, bot: true } as Message['author'] });
     assert.equal(await f.service.processMessage(message), true);
   }
-  assert.equal(f.state.scans.length, 2);
+  assert.equal(
+    f.state.scans.length,
+    1,
+    'the identical positive input reuses its bounded verdict across account origins',
+  );
   assert.equal(f.state.deletes.length, 2);
   assert.deepEqual(f.state.bans, []);
 });
@@ -637,4 +642,105 @@ test('Close aborts and awaits running workflows; a late uncooperative classifier
   assert.equal(lateReads, 0);
   assert.equal(lateWrites, 0);
   assert.deepEqual(f.state.deletes, []);
+});
+
+test('Positive repeat evidence requires exact attachment identities and the current complete policy revision', async (t) => {
+  const f = fixture(t);
+  let spamChecks = 0;
+  const attachments = (id: string) =>
+    new Collection([
+      [
+        id,
+        {
+          id,
+          url: `https://cdn.discordapp.com/attachments/${TEXT}/${id}/image.png`,
+          name: 'image.png',
+          contentType: 'image/png',
+          size: 100,
+        },
+      ],
+    ]) as Message['attachments'];
+  const checkSpam = async () => {
+    spamChecks++;
+    return false;
+  };
+  await f.service.processWithSpamCheck(f.makeMessage({ attachments: attachments(USER) }), checkSpam);
+  await f.service.processWithSpamCheck(f.makeMessage({ attachments: attachments(USER) }), checkSpam);
+  assert.equal(f.state.scans.length, 1);
+  assert.equal(spamChecks, 1);
+  await f.service.processWithSpamCheck(f.makeMessage({ attachments: attachments(OWNER) }), checkSpam);
+  assert.equal(f.state.scans.length, 2);
+  assert.equal(spamChecks, 2, 'different image identities never inherit the earlier verdict');
+  f.setPolicy({ logChannelId: null });
+  await f.service.processWithSpamCheck(f.makeMessage({ attachments: attachments(USER) }), checkSpam);
+  assert.equal(f.state.scans.length, 3);
+  assert.equal(spamChecks, 3, 'policy changes invalidate repeat evidence');
+});
+
+test('Positive repeat evidence expires after thirty seconds and does not indefinitely renew itself', async (t) => {
+  const f = fixture(t);
+  let now = Date.now();
+  t.mock.method(Date, 'now', () => now);
+  await f.service.processWithSpamCheck(f.makeMessage(), async () => false);
+  now += 20_000;
+  await f.service.processWithSpamCheck(f.makeMessage(), async () => false);
+  assert.equal(f.state.scans.length, 1);
+  now += 10_001;
+  await f.service.processWithSpamCheck(f.makeMessage(), async () => false);
+  assert.equal(f.state.scans.length, 2);
+});
+
+test('Ordinary obvious spam is checked before provider work and negative verdicts do not bypass later spam checks', async (t) => {
+  const f = fixture(t),
+    entered = latch(),
+    release = latch();
+  let checks = 0;
+  f.state.classifier = async () => {
+    entered.resolve();
+    await release.promise;
+    return { remove: false, categories: [], scannedImages: 0 };
+  };
+  const checkSpam = async () => ++checks >= 2;
+  const first = f.service.processWithSpamCheck(f.makeMessage(), checkSpam);
+  const second = f.service.processWithSpamCheck(f.makeMessage(), checkSpam),
+    third = f.service.processWithSpamCheck(f.makeMessage(), checkSpam);
+  await entered.promise;
+  release.resolve();
+  assert.deepEqual(await Promise.all([first, second, third]), [false, true, true]);
+  assert.equal(f.state.scans.length, 1);
+  assert.equal(checks, 3);
+  assert.equal(
+    await f.service.processWithSpamCheck(
+      f.makeMessage({ content: 'another ordinary spam post' }),
+      async () => true,
+    ),
+    true,
+  );
+  assert.equal(f.state.scans.length, 1);
+});
+
+test('Spam/verdict gates admit at most sixty-seven waiting callers and overflow never reaches providers', async (t) => {
+  const f = fixture(t),
+    release = latch();
+  let overflowSpamCalled = false;
+  const pending = Array.from({ length: 67 }, (_, index) =>
+    f.service.processWithSpamCheck(f.makeMessage({ content: `ordinary unique post ${index}` }), async () => {
+      await release.promise;
+      return true;
+    }),
+  );
+  assert.equal(f.service.status(G).spamPending, 67);
+  assert.equal(
+    await f.service.processWithSpamCheck(f.makeMessage({ content: 'overflow post' }), async () => {
+      overflowSpamCalled = true;
+      return false;
+    }),
+    true,
+  );
+  assert.equal(overflowSpamCalled, false);
+  assert.equal(f.state.scans.length, 0);
+  await f.service.close();
+  release.resolve();
+  assert((await Promise.all(pending)).every(Boolean));
+  assert.equal(f.service.status(G).spamPending, 0);
 });

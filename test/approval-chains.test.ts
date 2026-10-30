@@ -215,3 +215,35 @@ test('private plan reviews reject outsiders and orphan chain cleanup cannot leav
   sweepApprovalChains(f.store);
   assert.equal(f.store.list('approval.chains').length, 0);
 });
+test('configured chain review and saved voters obey the shared private-channel and current seniority gate', async (t) => {
+  const f = fixture(t),
+    { plan, hash } = await f.setup(),
+    approvalChannel = '740000000000000009';
+  let demoted = false;
+  f.registry.setConfirmationPolicy({
+    channelId: () => approvalChannel,
+    publish: async () => {},
+    authorize: async (ctx) => {
+      if (ctx.channelId !== approvalChannel) throw new Error('Private confirmation channel required');
+      if (![A, B].includes(ctx.member.id) || (demoted && ctx.member.id === A))
+        throw new Error('Highest role must be above Vibe');
+      return ctx;
+    },
+  });
+  const review = f.registry.get('approval.chain.review'),
+    input = review.schema.parse({ ownerId: U, planId: plan.id, planHash: hash, approve: true });
+  await assert.rejects(
+    Promise.resolve().then(() => review.execute(f.reviewer(f.first), input)),
+    /Private confirmation/,
+  );
+  await assert.rejects(
+    Promise.resolve().then(() => review.execute({ ...f.ctx, channelId: approvalChannel }, input)),
+    /above Vibe/,
+  );
+  await review.execute({ ...f.reviewer(f.first), channelId: approvalChannel }, input);
+  await review.execute({ ...f.reviewer(f.second), channelId: approvalChannel }, input);
+  await assertPlanApprovals(f.ctx, plan, f.registry);
+  demoted = true;
+  await assert.rejects(assertPlanApprovals(f.ctx, plan, f.registry), /above Vibe/);
+  assert.equal(f.effects(), 0);
+});

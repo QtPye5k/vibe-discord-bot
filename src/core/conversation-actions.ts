@@ -51,7 +51,8 @@ export function clearConversationActions(ctx: ActionContext): void {
 function selection(ctx: ActionContext, registry: ActionRegistry, explicitLast: boolean): Pending[] {
   const pending = registry.pending(ctx);
   if (explicitLast) return pending.slice(0, 1);
-  const remembered = ctx.store.get<Turn>(namespace, key(ctx));
+  // The dedicated queue can contain requests from other members; an old reviewer's turn is not its binding.
+  const remembered = registry.hasConfirmationPolicy() ? undefined : ctx.store.get<Turn>(namespace, key(ctx));
   if (remembered && remembered.expiresAt > Date.now()) {
     const selected = remembered.ids.map((id) => pending.find((item) => item.id === id));
     if (selected.some((item) => !item || remembered.fingerprints?.[item.id] !== fingerprint(item)))
@@ -86,6 +87,7 @@ export async function handleConversationAction(
   const cancel = /^(?:cancel(?: (?:it|that|the change|last|all))?|never mind|nevermind)$/.test(lower);
   if (!explicit && !confirm && !cancel) return { handled: false, outcomes: [] };
   const operation = explicit?.[1]?.toLowerCase() ?? (cancel ? 'cancel' : 'confirm');
+  await registry.assertConfirmationAuthority(ctx);
   let selected: Pending[];
   if (explicit) {
     const pending = registry.pending(ctx).find((item) => item.id === explicit[2]);
@@ -106,7 +108,7 @@ export async function handleConversationAction(
   }
   if (operation === 'cancel') {
     let count = 0;
-    for (const item of selected) count += Number(registry.cancel(ctx, item.id));
+    for (const item of selected) count += Number(await registry.reject(ctx, item.id));
     clearConversationActions(ctx);
     return {
       handled: true,

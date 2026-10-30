@@ -1,6 +1,6 @@
 # Capability coverage
 
-The supplied list contains **909 bullets across 22 sections**. These bullets overlap and include alternative implementation choices; they are not 909 independent commands. This build registers **697 executable action schemas**. [requirements.md](requirements.md) preserves the original list, [capabilities.json](capabilities.json) records every bullet, and [actions.json](actions.json) lists the actual action inputs.
+The supplied list contains **909 bullets across 22 sections**. These bullets overlap and include alternative implementation choices; they are not 909 independent commands. This build registers **699 executable action schemas**. [requirements.md](requirements.md) preserves the original list, [capabilities.json](capabilities.json) records every bullet, and [actions.json](actions.json) lists the actual action inputs.
 
 **Implemented** means a concrete registered action or source entrypoint exists. A configurable optional adapter counts as implemented code while its required fields are blank; blank fields keep it unavailable. This is separate from live credentials, hosting, grants, billing, platform eligibility and acceptance testing. **External setup** below is reserved for a literal platform operation that a bot API cannot perform. **Resolved architecture** records a deliberately unselected alternative, not a claim that another language/distributed backend was implemented. Partial/unimplemented counts, if nonzero, are unfinished code and must not be hidden by setup language.
 

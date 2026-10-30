@@ -168,6 +168,62 @@ test('changing readable ticket content during AI processing prevents stale class
   await assert.rejects(() => f.execute('ticket.ai.classify', { channelId: C }), /source or policy changed/);
   assert.equal(f.store.list('support.ai.labels').length, 0);
 });
+test('configured private approval routes ticket mutations for staff review without silently applying or reporting success', async (t) => {
+  const f = fixture(t),
+    category = '610000000000000009',
+    approvalChannelId = '610000000000000008',
+    writes: string[] = [],
+    published: string[] = [];
+  Object.assign(f.channel, { type: 0, permissionsFor: () => new PermissionsBitField(P.Administrator) });
+  f.ctx.guild.channels.fetch = (async (channelId: string) =>
+    channelId === category
+      ? { ...f.channel, type: 4 }
+      : f.channel) as unknown as typeof f.ctx.guild.channels.fetch;
+  for (const action of ['ticket.update', 'ticket.category'])
+    f.registry.register({
+      id: action,
+      description: 'Synthetic native ticket mutation',
+      category: 'support',
+      risk: 'write',
+      schema: z.record(z.string(), z.unknown()),
+      userPermissions: [],
+      botPermissions: [],
+      execute: () => {
+        writes.push(action);
+        return {};
+      },
+    });
+  await f.execute('ticket.ai.configure', {
+    enabled: true,
+    categories: ['support', 'billing'],
+    inferPriority: true,
+    applyPriority: true,
+    routes: [{ category: 'support', categoryId: category }],
+  });
+  f.ticket();
+  f.ai.chat = async () => ({ text: '{"category":"support","priority":"urgent"}', pending: [] });
+  f.registry.setConfirmationPolicy({
+    channelId: () => approvalChannelId,
+    publish: async (_ctx, pending) => {
+      published.push(pending.action);
+    },
+    authorize: async () => {
+      throw new Error('Private staff approval required');
+    },
+  });
+  const result = (await f.execute('ticket.ai.classify', { channelId: C })) as {
+    priorityState: string;
+    routeState: string;
+    pendingApprovals: unknown[];
+    notice: string;
+  };
+  assert.equal(result.priorityState, 'review-required');
+  assert.equal(result.routeState, 'review-required');
+  assert.equal(result.pendingApprovals.length, 2);
+  assert.deepEqual(published, ['ticket.update', 'ticket.category']);
+  assert.deepEqual(writes, []);
+  assert.doesNotMatch(result.notice, /update was applied|mapping was applied/);
+});
 test('automatic classification processes approved private-thread tickets with a single billed attempt', async (t) => {
   const f = fixture(t);
   await f.configure();

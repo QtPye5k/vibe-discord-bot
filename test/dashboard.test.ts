@@ -9,6 +9,7 @@ import { ActionRegistry } from '../src/core/registry.js';
 import type { ActionContext } from '../src/core/types.js';
 import { createDashboard, type DashboardOptions } from '../src/features/dashboard.js';
 import { dashboardPage } from '../src/discord/dashboard-page.js';
+import { createConfirmationPolicy } from '../src/core/confirmation-policy.js';
 
 const GUILD = '550000000000000001',
   USER = '550000000000000002',
@@ -276,6 +277,80 @@ test('dashboard defaults to explicit hosting enablement and exposes no unauthent
   assert.equal(response.status, 401);
   assert.equal(f.fetches(), 0);
   assert.equal(response.headers.get('access-control-allow-origin'), null);
+});
+test('dedicated approval policy routes dashboard writes without publishing a browser preview or approval credential', async (t) => {
+  const f = await fixture(t),
+    credentials = await f.login();
+  const published: unknown[] = [];
+  f.registry.setConfirmationPolicy({
+    channelId: () => '550000000000000009',
+    publish: async (_ctx, preview) => {
+      published.push(preview);
+    },
+    authorize: async () => {
+      throw new Error('Use the private Discord confirmation channel.');
+    },
+  });
+  const response = await f.api(credentials, 'request', { action: 'example.change', input: { value: 3 } });
+  assert.equal(response.status, 200);
+  assert.equal(published.length, 1);
+  const value = response.value as Record<string, unknown>;
+  assert.equal(value.status, 'approval-routed');
+  assert.equal(value.approvalChannelId, '550000000000000009');
+  for (const key of ['id', 'input', 'previewHash', 'action', 'expiresAt']) assert.equal(key in value, false);
+  const id = (published[0] as { id: string }).id;
+  assert.equal((await f.api(credentials, 'confirm', { id, previewHash: 'a'.repeat(64) })).status, 403);
+  assert.equal((await f.api(credentials, 'cancel', { id })).status, 403);
+  assert.equal(f.changed(), 0);
+});
+test('a different senior reviewer receives no original operator login URL; only the original requester DM receives it', async (t) => {
+  const f = await fixture(t),
+    approvalChannelId = '550000000000000009',
+    reviewerId = '550000000000000008',
+    privateMessages: unknown[] = [],
+    privateEdits: unknown[] = [],
+    publicPreviews: unknown[] = [];
+  Object.assign(f.member.user, {
+    send: async (payload: unknown) => {
+      privateMessages.push(payload);
+      return {
+        edit: async (payload: unknown) => {
+          privateEdits.push(payload);
+        },
+      };
+    },
+  });
+  const privatePolicy = createConfirmationPolicy({ isPrivateAction: (id) => id === 'dashboard.login' });
+  f.registry.setConfirmationPolicy({
+    channelId: () => approvalChannelId,
+    publish: async (_ctx, pending) => {
+      publicPreviews.push(pending);
+    },
+    authorize: async (ctx) => {
+      assert.equal(ctx.channelId, approvalChannelId);
+      assert.equal(ctx.member.id, reviewerId);
+      return ctx;
+    },
+    preparePrivateResult: privatePolicy.preparePrivateResult,
+  });
+  const requested = await f.registry.request(f.ctx, 'dashboard.login', {});
+  assert.equal(requested.status, 'confirmation');
+  if (requested.status !== 'confirmation') throw new Error('No pending login');
+  const receipt = await f.registry.confirm(
+    {
+      ...f.ctx,
+      channelId: approvalChannelId,
+      member: { ...f.member, id: reviewerId } as unknown as ActionContext['member'],
+    },
+    requested.id,
+  );
+  assert.equal(receipt.status, 'completed');
+  assert.match(JSON.stringify(receipt), /privateResult.*delivered/);
+  assert.equal(privateMessages.length, 1);
+  assert.equal(privateEdits.length, 1);
+  assert.equal(publicPreviews.length, 1);
+  assert.match(JSON.stringify(privateEdits), /dashboard\/login\?token=/);
+  assert.doesNotMatch(JSON.stringify([requested, publicPreviews, receipt]), /dashboard\/login\?token=/);
 });
 
 test('confirmed Discord login uses one-use expiring credentials and clears the query on redirect', async (t) => {

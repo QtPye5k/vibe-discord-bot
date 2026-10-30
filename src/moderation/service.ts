@@ -5,12 +5,14 @@ import type { Store } from '../core/store.js';
 import type { ActionContext } from '../core/types.js';
 import { assertPrivateTranscriptPrivacy } from '../voice/transcripts.js';
 import { matchContentRules } from './rules.js';
+import { createExplicitPenalties, EXPLICIT_STRIKES, type ExplicitPenalty } from './penalties.js';
 
 const snowflake = z.string().regex(/^\d{17,20}$/);
 export const moderationPolicySchema = z.strictObject({
   enabled: z.boolean().default(false),
   textEnabled: z.boolean().default(false),
   imagesEnabled: z.boolean().default(false),
+  explicitEscalationEnabled: z.boolean().default(true),
   honeypotChannelId: snowflake.nullable().default(null),
   logChannelId: snowflake.nullable().default(null),
 });
@@ -42,6 +44,7 @@ interface Case {
   scannedImages: number;
   deleted?: boolean;
   banned?: boolean;
+  explicitPenalty?: ExplicitPenalty;
   issue?: string;
 }
 interface Job {
@@ -61,10 +64,10 @@ const POLICY = 'moderation.automatic',
   SEEN = 'moderation.automatic.seen',
   TARGETS = 'moderation.automatic.targets';
 const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
-const snapshot = (message: Message) =>
+const snapshot = (message: Message, includeRevision = true) =>
   hash([
     message.content,
-    message.editedTimestamp,
+    includeRevision ? message.editedTimestamp : null,
     [...message.attachments.values()].map((a) => [a.id, a.url, a.name, a.contentType, a.size]),
     message.embeds.map((e) => [
       e.url,
@@ -122,6 +125,10 @@ export function moderationMessageView(
 /** Only new/edited events are inspected. Effects are never retried after an ambiguous Discord result. */
 export function createAutomaticModeration(options: AutomaticModerationOptions) {
   const { store, client } = options;
+  const explicitPenalties = createExplicitPenalties(store);
+  const positiveEvidence = new Map<string, { result: ExplicitClassification; expiresAt: number }>(),
+    spamGates = new Map<string, { promise: Promise<void>; resolve: () => void }>();
+  let spamAdmissions = 0;
   const queue: Job[] = [],
     honeypotQueue: Job[] = [],
     jobs = new Map<string, Job>(),
@@ -173,6 +180,22 @@ export function createAutomaticModeration(options: AutomaticModerationOptions) {
     policy(guildId).enabled;
   const live = (job: Job) =>
     !closed && !job.controller.signal.aborted && !!job.message.guild && enabled(job.message.guild.id);
+  const evidenceKey = (message: Message, selected: AutomaticModerationPolicy) =>
+    hash([message.guildId, selected, snapshot(moderationMessageView(message, selected), false)]);
+  const cachedPositive = (key: string) => {
+    const value = positiveEvidence.get(key);
+    if (value && value.expiresAt > Date.now()) return value.result;
+    if (value) positiveEvidence.delete(key);
+    return undefined;
+  };
+  const rememberPositive = (key: string, result: ExplicitClassification) => {
+    positiveEvidence.delete(key);
+    positiveEvidence.set(key, {
+      result: { remove: true, categories: labels(result.categories), scannedImages: result.scannedImages },
+      expiresAt: Date.now() + 30000,
+    });
+    while (positiveEvidence.size > 256) positiveEvidence.delete(positiveEvidence.keys().next().value!);
+  };
   const finish = (job: Job, value: boolean) => {
     if (job.settled) return;
     job.settled = true;
@@ -220,7 +243,7 @@ export function createAutomaticModeration(options: AutomaticModerationOptions) {
       assertPrivateTranscriptPrivacy(ctx, channel, bot, roles);
       if (!channel.permissionsFor(bot)?.has([P.ViewChannel, P.SendMessages])) return;
       await channel.send({
-        content: `Automatic moderation ${record.kind}: ${record.state}.\nCase: ${record.id}\nMember: ${record.userId}\nChannel: ${record.channelId}\nMessage: ${record.messageId}\nDeleted: ${record.deleted === true}; banned: ${record.banned === true}.\nCategories: ${record.categories.join(', ') || 'none'}${record.issue ? `\nIssue: ${record.issue}` : ''}`,
+        content: `Automatic moderation ${record.kind}: ${record.state}.\nCase: ${record.id}\nMember: ${record.userId}\nChannel: ${record.channelId}\nMessage: ${record.messageId}\nDeleted: ${record.deleted === true}; banned: ${record.banned === true || record.explicitPenalty?.banned === true}.${record.explicitPenalty ? `\nExplicit violation: ${record.explicitPenalty.count}/5; ${record.explicitPenalty.action}: ${record.explicitPenalty.state}.${record.explicitPenalty.warned ? ' Warning delivered.' : ''}${record.explicitPenalty.timeoutUntil ? ` Timeout ends <t:${Math.floor(record.explicitPenalty.timeoutUntil / 1000)}:F>.` : ''}${record.explicitPenalty.issue ? `\nPenalty issue: ${record.explicitPenalty.issue}` : ''}` : ''}\nCategories: ${record.categories.join(', ') || 'none'}${record.issue ? `\nIssue: ${record.issue}` : ''}`,
         allowedMentions: { parse: [] },
       });
     } catch {
@@ -281,8 +304,10 @@ export function createAutomaticModeration(options: AutomaticModerationOptions) {
       if (!selected.textEnabled && !selected.imagesEnabled) return false;
       const view = moderationMessageView(message, selected);
       try {
-        const rule = selected.textEnabled ? matchContentRules(view) : { remove: false, categories: [] };
+        const rule = selected.textEnabled ? matchContentRules(view) : { remove: false, categories: [] },
+          priorPositive = cachedPositive(evidenceKey(message, selected));
         if (rule.remove) result = { ...rule, scannedImages: 0 };
+        else if (priorPositive) result = priorPositive;
         else {
           if (providers >= 3) {
             report('classifier slots remain occupied by cancelled provider work');
@@ -324,6 +349,8 @@ export function createAutomaticModeration(options: AutomaticModerationOptions) {
       if (JSON.stringify(currentPolicy) !== JSON.stringify(selected)) return false;
       message = await wait(job, fresh(job));
       if (!message || snapshot(message) !== job.snapshot) return false;
+      if (result.remove === true && !cachedPositive(evidenceKey(message, selected)))
+        rememberPositive(evidenceKey(message, selected), result);
       if (result.remove !== true) {
         if (result.unscannable?.length) {
           report('some images could not be scanned; no clean guarantee was recorded');
@@ -454,8 +481,47 @@ export function createAutomaticModeration(options: AutomaticModerationOptions) {
           targets.delete(targetKey);
         }
       }
-    } else if (record.deleted) record.state = 'completed';
-    else if (record.state !== 'uncertain') record.state = 'blocked';
+    } else {
+      if (record.deleted) record.state = 'completed';
+      else if (record.state !== 'uncertain') record.state = 'blocked';
+      if (selected.explicitEscalationEnabled) {
+        if (!record.deleted && record.issue !== 'delete-result-unknown') {
+          const latest = await wait(job, fresh(job));
+          if (!latest || snapshot(latest) !== job.snapshot) return true;
+          message = latest;
+        }
+        const revision = JSON.stringify(selected),
+          penaltyMessage = message;
+        try {
+          const outcome = await wait(
+            job,
+            explicitPenalties.apply({
+              message: penaltyMessage,
+              caseId,
+              current: () =>
+                live(job) &&
+                policy(penaltyMessage.guildId!).explicitEscalationEnabled &&
+                JSON.stringify(policy(penaltyMessage.guildId!)) === revision,
+              wait: (work) => wait(job, work),
+            }),
+          );
+          if (!live(job)) return true;
+          if (outcome.penalty) {
+            record.explicitPenalty = outcome.penalty;
+            if (outcome.penalty.banned) record.banned = true;
+            if (outcome.penalty.state === 'uncertain') record.state = 'uncertain';
+            else if (outcome.penalty.state !== 'completed' && record.state !== 'uncertain')
+              record.state = 'blocked';
+          }
+          if (outcome.issue) record.issue = record.issue ? `${record.issue};${outcome.issue}` : outcome.issue;
+        } catch {
+          if (!live(job)) return true;
+          record.issue = record.issue
+            ? `${record.issue};explicit-penalty-interrupted`
+            : 'explicit-penalty-interrupted';
+        }
+      }
+    }
     if (live(job)) {
       save(job, record);
       await wait(job, privateLog(job, record));
@@ -565,6 +631,50 @@ export function createAutomaticModeration(options: AutomaticModerationOptions) {
   }
   return {
     processMessage,
+    async processWithSpamCheck(message: Message, checkSpam: () => Promise<boolean>): Promise<boolean> {
+      if (closed) return true;
+      if (!message.guild || !enabled(message.guild.id)) return checkSpam();
+      const selected = policy(message.guild.id),
+        key = evidenceKey(message, selected);
+      const local =
+        selected.textEnabled && matchContentRules(moderationMessageView(message, selected)).remove;
+      // Known explicit content must reach its own sanction before spam deletes the evidence. No new API request is needed.
+      if (local || cachedPositive(key)) return this.processMessage(message);
+      // Bound callers waiting on a shared verdict as well as the existing scan queue. Never send overflow to AI/XP.
+      if (spamAdmissions >= 67) {
+        report('spam/classification admission queue is full; event suppressed');
+        return true;
+      }
+      spamAdmissions++;
+      const existing = spamGates.get(key);
+      if (existing) {
+        try {
+          await existing.promise;
+          if (closed) return true;
+          if (cachedPositive(key)) return this.processMessage(message);
+          if (await checkSpam()) return true;
+          if (closed) return true;
+          return this.processMessage(message);
+        } finally {
+          spamAdmissions--;
+        }
+      }
+      let resolve!: () => void;
+      const promise = new Promise<void>((done) => {
+        resolve = done;
+      });
+      const gate = { promise, resolve };
+      spamGates.set(key, gate);
+      try {
+        if (await checkSpam()) return true;
+        if (closed) return true;
+        return await this.processMessage(message);
+      } finally {
+        spamAdmissions--;
+        if (spamGates.get(key) === gate) spamGates.delete(key);
+        resolve();
+      }
+    },
     policy,
     status: (guildId: string) => ({
       policy: policy(guildId),
@@ -574,7 +684,14 @@ export function createAutomaticModeration(options: AutomaticModerationOptions) {
       normalQueued: queue.length,
       honeypotActive,
       honeypotQueued: honeypotQueue.length,
+      spamPending: spamAdmissions,
+      positiveEvidence: positiveEvidence.size,
       uncertainTargets: store.list(TARGETS, `${guildId}:`).length,
+      trackedExplicitMembers: Number(
+        store.db
+          .prepare('SELECT count(*) AS n FROM kv WHERE namespace=? AND key>=? AND key<?')
+          .get(EXPLICIT_STRIKES, `${guildId}:`, `${guildId};`)?.n ?? 0,
+      ),
     }),
     drain: async () => {
       await Promise.allSettled([...jobs.values()].map((job) => job.promise));
@@ -582,6 +699,9 @@ export function createAutomaticModeration(options: AutomaticModerationOptions) {
     },
     close: async () => {
       closed = true;
+      for (const gate of spamGates.values()) gate.resolve();
+      spamGates.clear();
+      positiveEvidence.clear();
       for (const job of jobs.values()) {
         job.controller.abort();
         finish(job, false);

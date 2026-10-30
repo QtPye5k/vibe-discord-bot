@@ -8,6 +8,30 @@ const field = (name: string, provider: string, secret: boolean, description: str
 /** Optional configuration only; empty values never grant external access. */
 export const ADDITIONAL_SERVICE_FIELDS: readonly IntegrationField[] = [
   field(
+    'KLIPY_API_KEY',
+    'media',
+    true,
+    'Optional KLIPY application key for GIF search; bot integration approval is also required.',
+  ),
+  field(
+    'KLIPY_BOT_APPROVED',
+    'media',
+    false,
+    'Set true only after KLIPY approves this server-side Discord integration and direct-link presentation.',
+  ),
+  field(
+    'PINTEREST_ACCESS_TOKEN',
+    'media',
+    true,
+    'Optional Pinterest OAuth token with approved public partner-search access and boards:read/pins:read scopes.',
+  ),
+  field(
+    'PINTEREST_COUNTRY_CODE',
+    'media',
+    false,
+    'Two-letter country code for approved Pinterest public partner search; default US.',
+  ),
+  field(
     'APP_PUBLIC_URL',
     'oauth',
     false,

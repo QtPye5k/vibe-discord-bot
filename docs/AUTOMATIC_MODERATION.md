@@ -1,6 +1,6 @@
 # Automatic moderation
 
-Automatic moderation handles new messages and message edits in the configured servers. It does not scan historical channel contents. Spam checks run before API classification; content awaiting classification receives no community XP or FAQ response. A handled message stops downstream conversation and workflow processing.
+Automatic moderation handles new messages and message edits in the configured servers. It does not scan historical channel contents. Ordinary content receives local spam checks before API classification. Local explicit-rule matches and exact repeated inputs with a recent positive verdict reach explicit moderation first, so spam deletion cannot suppress their progressive penalties. Content awaiting a shared classification receives no community XP or FAQ response. A handled message stops downstream conversation and workflow processing.
 
 ## Configuration
 
@@ -14,7 +14,7 @@ Automatic moderation handles new messages and message edits in the configured se
 | `MODERATION_LOG_CHANNEL_ID` | Dedicated private destination for automatic moderation case outcomes. Blank disables Discord case notifications.         |
 | `HONEYPOT_CHANNEL_ID`       | Posting in this channel or its threads triggers deletion and an automatic ban attempt. Blank disables the honeypot rule. |
 
-The per-server policy separately controls `enabled`, `textEnabled`, `imagesEnabled`, `honeypotChannelId` and `logChannelId`. The moderation feature switch and allowed-server checks still apply. Message Content intent must be enabled in configuration and the Discord Developer Portal for ordinary message bodies and attachments to be available to the bot.
+The per-server policy separately controls `enabled`, `textEnabled`, `imagesEnabled`, `explicitEscalationEnabled`, `honeypotChannelId` and `logChannelId`. Progressive explicit-content penalties default to enabled, including for existing stored policies that do not contain the new field. Reading that default does not replace or reset the other stored settings. The moderation feature switch and allowed-server checks still apply. Message Content intent must be enabled in configuration and the Discord Developer Portal for ordinary message bodies and attachments to be available to the bot.
 
 Custom spam protection uses the existing `community.configure` action and its independent `antiSpamEnabled` setting. `antiSpamExemptStaff` defaults to `true` for compatibility; set it to `false` to include members with Manage Messages and administrators. `repeatLimit` accepts 2–10 matching posts and defaults to 4; `mentionLimit`, `messageLimit` and `blockedKeywords` adjust the other local rules. The current server profile uses `repeatLimit: 3`. Disabling the community or moderation feature suppresses custom spam enforcement.
 
@@ -30,11 +30,35 @@ The honeypot rule attempts to delete the triggering message and ban its author w
 
 Bot/channel permissions, current policy, message identity and content revision are checked again before effects. Content edits invalidate an older classification snapshot. Deleted spam receives no XP or FAQ reply; a failed spam deletion still suppresses downstream bot processing.
 
+## Progressive explicit-content penalties
+
+Each distinct, confirmed explicit-content message from an eligible current server member advances this server's persistent counter:
+
+| Violation | Automatic response                                               |
+| --------- | ---------------------------------------------------------------- |
+| First     | Warning in the originating channel, mentioning only that member. |
+| Second    | Communication timeout for five minutes.                          |
+| Third     | Communication timeout for fifteen minutes.                       |
+| Fourth    | Communication timeout for thirty minutes.                        |
+| Fifth     | Permanent server ban. No automatic unban is scheduled.           |
+
+The bot still attempts to delete the classified content. The progressive ladder applies only when the member's highest role is **strictly below** Vibe's highest role. Peers, higher roles, the server owner, Vibe itself, departed accounts and webhook identities receive no progressive strike or penalty. Content deletion remains independent of this eligibility check. Other current member accounts are eligible when Discord permits the requested effect; administrators and other accounts Discord marks unmoderatable cannot receive a timeout, and those outcomes are recorded as blocked.
+
+The member, bot and current roles are fetched again before reserving a strike and issuing an effect. Bot permission loss, role promotion, policy changes, cancellation or inaccessible channels can prevent enforcement. Enabling the ladder through `moderation.automatic.configure` requires both the requesting manager and Vibe to have Moderate Members and Ban Members. Runtime checks remain necessary after configuration.
+
+Counts are isolated by server and member. One message identity can earn at most one strike, even when create/edit events overlap, its text changes, it is processed again, or Vibe restarts. Penalty reservations and effects are serialized per member. Counters have no automatic expiry or reset; the first five counted message identities remain in the local ledger even when older case reports are pruned. Manual `warning.issue` and `case.warn` records do not affect this ladder, and historical cleanup does not issue warnings, timeouts or bans.
+
+Timeouts have fixed absolute deadlines and never shorten an existing longer timeout. A violation count records a confirmed eligible violation, not a guarantee that Discord accepted its sanction. Missing permissions and uncertain HTTP outcomes remain visible in the private case outcome. A repeated message never retries its warning, timeout or ban. After the fifth violation the final sanction is not automatically attempted again for later messages; blocked or uncertain permanent bans require moderator review. The persistent deduplication ledger stores at most five counted message identities per member rather than every later post.
+
+Warnings use the originating channel and a stable Discord message nonce; no unsolicited DM is sent. Detailed counts, actions, deadlines and outcomes go only to the configured, verified private moderation log and the local case database. Raw content is excluded from these records. `moderation.automatic.status` reports recent outcomes and up to 100 member counters. Setting `explicitEscalationEnabled` to `false` pauses new progressive penalties while retaining content deletion, existing counts and all unrelated policy settings; it does not undo completed Discord actions.
+
 ## Private cases and limits
 
-Automatic cases retain identifiers, category labels, attempted effects and outcomes in the local database. They do not retain image bytes or message bodies. Case notifications go only to a verified private text channel with explicit @everyone visibility denied and no ordinary role granted access. Selected member overwrites and the bot's own managed role are supported; Discord administrators retain their platform-level access. An invalid or unavailable private destination has no public fallback. Cases older than 90 days are pruned during periodic admissions.
+Automatic cases retain identifiers, category labels, attempted effects, progressive strike numbers and outcomes in the local database. They do not retain image bytes or message bodies. Case notifications go only to a verified private text channel with explicit @everyone visibility denied and no ordinary role granted access. Selected member overwrites and the bot's own managed role are supported; Discord administrators retain their platform-level access. An invalid or unavailable private destination has no public fallback. Cases older than 90 days are pruned during periodic admissions; the progressive counter and its counted-message deduplication ledger are retained separately.
 
 Ordinary scans have three active slots and up to 64 waiting jobs. Honeypot candidates use a separate reserved lane with two active slots and 64 waiting jobs, so classifier load cannot exhaust honeypot capacity. Cached channel identity selects the lane; fresh channel, policy and authority checks still determine enforcement. Both lanes have a 30-second service deadline. Each classifier call has a maximum 12-second total deadline, up to ten still-image candidates, bounded downloads and a 16-megapixel decoding limit. Images are resized to at most 1024 pixels per side and submitted sequentially with at most one image per API request. Text accompanies the first scannable image, or uses a text-only request when no image is scannable. Subsequent image-only results cannot create text-only category decisions. A positive verdict returns immediately, preserving the decision and reporting the number of images actually classified. All requests share the same 12-second deadline. Default input-file size is 8 MiB, subject to the configured attachment limit and a 32 MiB aggregate download budget. Message text is limited to 4,000 characters; message plus embed metadata is bounded at 12,000 characters.
+
+Concurrent identical inputs wait behind their first spam/classification decision, with at most 67 callers admitted to this bounded preflight stage. Overflow is suppressed from downstream bot processing without guessing a penalty. A positive verdict can be reused for thirty seconds across at most 256 in-memory fingerprints. The fingerprint includes the server, exact policy revision, enabled text, attachment identities and metadata, embeds and stickers; message IDs and edit timestamps do not disguise identical inputs. Different images or policy settings require a new decision. Reuse does not extend the expiry, persist raw bodies, cache a negative verdict as clean, or skip fresh message and member/hierarchy checks. This lets repeated explicit posts each receive a distinct strike without paying for the same positive classification again, while ordinary spam still stops before unnecessary provider work.
 
 Animated or multipage images, video, unsupported formats, unavailable previews and data beyond the scan bounds are not fully classified. Unscannable content and provider errors are reported for review and never establish that a message is clean. Queue saturation, API access, network availability and Discord permissions can prevent automatic removal. These bounded automated decisions do not guarantee detection of every explicit image or spam pattern.
 

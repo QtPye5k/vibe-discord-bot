@@ -14,6 +14,8 @@ import { bindEvents, createServices } from '../src/app.js';
 import { loadConfig } from '../src/config.js';
 import { Store } from '../src/core/store.js';
 import { getProfile } from '../src/features/community.js';
+import { createAutomaticModeration } from '../src/moderation/service.js';
+import { EXPLICIT_STRIKES, type ExplicitStrikeCount } from '../src/moderation/penalties.js';
 
 const USER = '810000000000000002',
   BOT = '810000000000000003',
@@ -166,6 +168,7 @@ function fixture(t: TestContext) {
   return {
     services,
     guildId,
+    guild,
     trace,
     replies,
     sends,
@@ -355,4 +358,108 @@ test('the fourth repeat removes the complete observed burst before another class
     'spam does not queue an event workflow',
   );
   assert.deepEqual(f.errors, []);
+});
+
+test('Every distinct explicit post reaches progressive penalties even when a repeated burst exceeds the spam threshold', async (t) => {
+  for (const mode of ['local', 'semantic'] as const)
+    await t.test(mode, async (sub) => {
+      const f = fixture(sub),
+        entered = latch(),
+        release = latch(),
+        timeouts: number[] = [],
+        bans: string[] = [];
+      let scans = 0;
+      const bot = {
+        id: BOT,
+        guild: { id: f.guildId },
+        user: { id: BOT, bot: true },
+        permissions: new PermissionsBitField(P.Administrator),
+        roles: {
+          cache: new Collection(),
+          highest: {
+            position: 100,
+            comparePositionTo: (target: { position: number }) => 100 - target.position,
+          },
+        },
+      };
+      const target = {
+        id: USER,
+        guild: { id: f.guildId },
+        user: { id: USER, bot: false },
+        permissions: new PermissionsBitField(0n),
+        roles: { cache: new Collection(), highest: { position: 1 } },
+        moderatable: true,
+        bannable: true,
+        communicationDisabledUntilTimestamp: null,
+        disableCommunicationUntil: async (until: number) => {
+          timeouts.push(until);
+        },
+      };
+      Object.assign(f.guild, { ownerId: OTHER_BOT, roles: { fetch: async () => new Collection() } });
+      Object.assign(f.guild.members, {
+        me: bot,
+        fetchMe: async () => bot,
+        fetch: async () => target,
+        ban: async (id: string) => {
+          bans.push(id);
+        },
+      });
+      const service = createAutomaticModeration({
+        store: f.services.store,
+        client: f.services.client,
+        allowedGuildIds: [f.guildId],
+        classify: async () => {
+          scans++;
+          entered.release();
+          await release.promise;
+          return { remove: true, categories: ['sexual'], scannedImages: 0 };
+        },
+      });
+      f.services.automaticModeration = service;
+      f.services.store.set('moderation.automatic', f.guildId, {
+        enabled: true,
+        textEnabled: true,
+        imagesEnabled: false,
+        explicitEscalationEnabled: true,
+      });
+      f.services.store.set('community.settings', f.guildId, {
+        antiSpamEnabled: true,
+        antiSpamExemptStaff: false,
+        repeatLimit: 2,
+        xpEnabled: true,
+      });
+      const messages = Array.from({ length: 5 }, () =>
+        f.makeMessage(
+          mode === 'local' ? 'Watch free porn videos' : 'A semantic-only classified unsafe utterance',
+        ),
+      );
+      try {
+        for (const message of messages)
+          f.services.client.emit(Events.MessageCreate, message as ClientEvents[Events.MessageCreate][0]);
+        if (mode === 'semantic') {
+          await entered.promise;
+          assert.equal(scans, 1);
+        }
+      } finally {
+        release.release();
+      }
+      await f.drain();
+      await service.close();
+      assert.equal(
+        f.services.store.get<ExplicitStrikeCount>(EXPLICIT_STRIKES, `${f.guildId}:${USER}`)?.count,
+        5,
+      );
+      assert.equal(timeouts.length, 3);
+      assert.deepEqual(bans, [USER]);
+      assert.equal(new Set(f.deleted).size, 5);
+      assert.equal(f.deleted.length, 5, 'spam must not delete an already moderated post twice');
+      assert.equal(
+        scans,
+        mode === 'local' ? 0 : 1,
+        'obvious local content and repeated positive semantic input avoid extra provider calls',
+      );
+      assert.deepEqual(f.requests, []);
+      assert.deepEqual(f.replies, []);
+      assert.equal(getProfile(f.services.store, f.guildId, USER).xp, 0);
+    });
 });

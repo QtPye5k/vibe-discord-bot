@@ -839,7 +839,7 @@ test('AI tool errors become explicit tool results; unknown actions never run arb
   }
 });
 
-test('AI tools cannot recursively invoke paid AI actions', async () => {
+test('AI image actions are discoverable and use the normal registry confirmation policy', async () => {
   let round = 0,
     seen: Record<string, unknown> | undefined;
   const f = fixture((body) => {
@@ -850,8 +850,10 @@ test('AI tools cannot recursively invoke paid AI actions', async () => {
   });
   try {
     registerAiActions(f.registry, f.ai);
-    await f.ai.chat(f.ctx, 'Make images recursively');
-    assert.ok(JSON.stringify(seen?.input).includes('recursively'));
+    const reply = await f.ai.chat(f.ctx, 'Make an image');
+    assert.equal(reply.pending[0]?.action, 'ai.image');
+    assert.equal(findConversationActions(f.registry, 'ai.image', 'private')[0]?.action, 'ai.image');
+    assert.ok(JSON.stringify(seen?.input).includes('confirmation'));
     assert.equal(round, 2);
   } finally {
     f.store.close();
@@ -863,6 +865,134 @@ test('Conversational-only voice/context-menu requests never accept administrativ
   try {
     await assert.rejects(f.ai.chat(f.ctx, 'say hello', undefined, false), /unavailable/);
     assert.equal(f.store.db.prepare('SELECT count(*) AS n FROM confirmations').get()?.n, 0);
+  } finally {
+    f.store.close();
+  }
+});
+
+test('Mention private actions prove DM delivery before execution and never retain their result in public history', async () => {
+  let round = 0,
+    delivered = false,
+    executions = 0;
+  const f = fixture(() =>
+    response(
+      ++round === 1
+        ? [functionCall('run_action', { action: 'private.records', json: '{}' })]
+        : [message('Here are your private records.')],
+    ),
+  );
+  f.registry.register({
+    id: 'private.records',
+    category: 'system',
+    description: 'Read private records',
+    risk: 'read',
+    schema: z.strictObject({}),
+    userPermissions: [],
+    botPermissions: [],
+    execute: () => {
+      assert(delivered);
+      executions++;
+      return 'private-result';
+    },
+  });
+  try {
+    const reply = await f.ai.chat(f.ctx, 'Show my records', undefined, true, {
+      responsePrivacy: 'public',
+      allowPrivateActions: true,
+      preparePrivateDelivery: async () => {
+        delivered = true;
+      },
+      memoryScope: 'public-mention',
+      historyTtlSeconds: 600,
+    });
+    assert.equal(reply.privateResponse, true);
+    assert.equal(executions, 1);
+    assert.equal(f.store.list('ai.conversations').length, 0);
+    assert.equal(
+      findConversationActions(f.registry, 'records', 'public', true)[0]?.action,
+      'private.records',
+    );
+  } finally {
+    f.store.close();
+  }
+});
+
+test('A blocked DM prevents a private mention action from executing', async () => {
+  let round = 0,
+    executions = 0;
+  const f = fixture(() =>
+    response(
+      ++round === 1
+        ? [functionCall('run_action', { action: 'private.records', json: '{}' })]
+        : [message('Enable DMs and ask again.')],
+    ),
+  );
+  f.registry.register({
+    id: 'private.records',
+    category: 'system',
+    description: 'Private records',
+    risk: 'read',
+    schema: z.strictObject({}),
+    userPermissions: [],
+    botPermissions: [],
+    execute: () => {
+      executions++;
+      return 'never expose';
+    },
+  });
+  try {
+    const reply = await f.ai.chat(f.ctx, 'Show my records', undefined, true, {
+      responsePrivacy: 'public',
+      allowPrivateActions: true,
+      preparePrivateDelivery: async () => {
+        throw new Error('DM disabled');
+      },
+    });
+    assert.equal(executions, 0);
+    assert.equal(reply.privateResponse, undefined);
+  } finally {
+    f.store.close();
+  }
+});
+
+test('A sequential image tool shares the parent AI slot, charges quota, and returns real bytes', async () => {
+  let rounds = 0,
+    images = 0;
+  const f = fixture(
+    (_body, path) => {
+      if (path.includes('/images/generations')) {
+        images++;
+        return { data: [{ b64_json: Buffer.from('test image bytes').toString('base64') }] };
+      }
+      return response(
+        ++rounds === 1
+          ? [functionCall('run_action', { action: 'ai.image', json: '{"prompt":"rabbit"}' })]
+          : [message('Image attached.')],
+      );
+    },
+    { MAX_AI_CONCURRENT: '1' },
+  );
+  // A read wrapper exercises the nested API path independently of confirmation UI.
+  f.registry.register({
+    id: 'ai.image',
+    category: 'ai',
+    description: 'Test image',
+    risk: 'read',
+    schema: z.strictObject({ prompt: z.string() }),
+    userPermissions: [],
+    botPermissions: [],
+    execute: (ctx, input) => f.ai.image(ctx, input.prompt),
+  });
+  try {
+    const reply = await f.ai.chat(f.ctx, 'Make a rabbit');
+    assert.equal(images, 1);
+    assert.equal(reply.files?.[0]?.attachment.toString(), 'test image bytes');
+    assert.equal(
+      Number(
+        f.store.db.prepare('SELECT count FROM quota WHERE scope=?').get(`user:${guildId}:${userId}`)?.count,
+      ),
+      2,
+    );
   } finally {
     f.store.close();
   }
@@ -1314,5 +1444,61 @@ test('Image generation uses the supported default model and file transcription s
     assert.equal(loadConfig({}).imageEditModel, 'gpt-image-2.5-sunburst');
   } finally {
     store.close();
+  }
+});
+
+test('Aborting the parent during a nested allowance wait does not charge the child quota or dispatch its API call', async () => {
+  let resolveAllowance!: () => void,
+    entered!: () => void,
+    allowances = 0,
+    images = 0;
+  const gate = new Promise<void>((resolve) => {
+      resolveAllowance = resolve;
+    }),
+    started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+  const f = fixture((_body, path) => {
+    if (path.includes('/images/generations')) {
+      images++;
+      return { data: [{ b64_json: Buffer.from('unused').toString('base64') }] };
+    }
+    return response([functionCall('run_action', { action: 'ai.image', json: '{"prompt":"A test image"}' })]);
+  });
+  f.registry.register({
+    id: 'ai.image',
+    category: 'ai',
+    description: 'Nested image test',
+    risk: 'read',
+    userPermissions: [],
+    botPermissions: [],
+    schema: z.strictObject({ prompt: z.string() }),
+    execute: (ctx, input) => f.ai.image(ctx, input.prompt),
+  });
+  f.ai.setAllowanceResolver(async () => {
+    if (++allowances === 2) {
+      entered();
+      await gate;
+    }
+    return undefined;
+  });
+  const controller = new AbortController();
+  try {
+    const work = f.ai.chat(f.ctx, 'Generate an image', undefined, true, { signal: controller.signal });
+    await started;
+    controller.abort(new Error('Addressed request stopped'));
+    resolveAllowance();
+    await assert.rejects(work, /stopped|abort/i);
+    assert.equal(images, 0);
+    assert.equal(
+      Number(
+        f.store.db.prepare('SELECT count FROM quota WHERE scope=?').get(`user:${guildId}:${userId}`)?.count,
+      ),
+      1,
+    );
+    assert.equal(f.store.list('ai.conversations').length, 0);
+  } finally {
+    resolveAllowance();
+    f.store.close();
   }
 });

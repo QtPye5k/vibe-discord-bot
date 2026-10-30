@@ -111,6 +111,18 @@ function safeValue(value: unknown, file?: (data: Buffer, name: string) => unknow
     if (Buffer.isBuffer(item)) return { attachmentBytes: item.length };
     if (typeof item === 'bigint') return String(item);
     if (!item || typeof item !== 'object') return item;
+    if (
+      'status' in item &&
+      item.status === 'confirmation' &&
+      'approvalChannelId' in item &&
+      typeof item.approvalChannelId === 'string'
+    )
+      return {
+        status: 'approval-routed',
+        approvalChannelId: item.approvalChannelId,
+        notice:
+          'Review and approve or reject this request in the dedicated private Discord confirmation channel.',
+      };
     if (ancestors.has(item)) return '[Circular value]';
     if (
       'attachment' in item &&
@@ -216,6 +228,20 @@ export function createDashboard(options: DashboardOptions) {
     return { url: `/dashboard/file/${token}`, name, bytes: data.length, expiresAt };
   }
   const outcomeValue = (value: unknown, session: Session) => {
+    if (
+      value &&
+      typeof value === 'object' &&
+      'status' in value &&
+      value.status === 'confirmation' &&
+      'approvalChannelId' in value &&
+      typeof value.approvalChannelId === 'string'
+    )
+      return {
+        status: 'approval-routed',
+        approvalChannelId: value.approvalChannelId,
+        notice:
+          'Review and approve or reject this request in the dedicated private Discord confirmation channel.',
+      };
     let count = 0,
       bytes = 0;
     return safeValue(value, (data, name) => {
@@ -522,6 +548,10 @@ export function createDashboard(options: DashboardOptions) {
           if (value.pending.size >= 10)
             throw new HttpError(429, 'Confirm or cancel current previews before requesting more.');
           const outcome = await registry.request(ctx, parsed.action, parsed.input);
+          if (outcome.status === 'confirmation' && outcome.approvalChannelId) {
+            json(response, 200, outcomeValue(outcome, value));
+            break;
+          }
           if (outcome.status === 'confirmation') {
             const previewHash = hash(JSON.stringify(outcome));
             value.pending.set(outcome.id, { previewHash, expiresAt: outcome.expiresAt });
@@ -547,7 +577,7 @@ export function createDashboard(options: DashboardOptions) {
           const { id } = z.strictObject({ id: z.string().min(1).max(100) }).parse(input);
           if (!value.pending.delete(id))
             throw new HttpError(403, 'This action does not belong to the current dashboard session.');
-          json(response, 200, { cancelled: registry.cancel(ctx, id) });
+          json(response, 200, { cancelled: await registry.reject(ctx, id) });
           break;
         }
         case 'logout':

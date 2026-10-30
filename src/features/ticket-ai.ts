@@ -239,14 +239,16 @@ async function classify(
     const current = await verifyMutation(),
       requested = await registry.request(current.ctx, action, input);
     if (requested.status !== 'confirmation') return requested;
+    if (requested.approvalChannelId) return requested;
     try {
       const fresh = await verifyMutation();
       return await registry.confirm(fresh.ctx, requested.id);
     } catch (error) {
-      registry.cancel(ctx, requested.id);
+      registry.invalidatePending(current.ctx, requested.id);
       throw error;
     }
   };
+  const pendingApprovals: { action: string; approvalChannelId: string }[] = [];
   if (policy.applyPriority && label.priority) {
     label.priorityState = 'review-required';
     ctx.store.set('support.ai.labels', key(ctx.guild.id, ticketId), label);
@@ -261,13 +263,17 @@ async function classify(
           locale: label.locale,
           aiCategory: label.category,
         });
+        label.priorityState = 'applied';
       } else {
-        await applyNative('ticket.update', {
+        const update = await applyNative('ticket.update', {
           channelId: ticket.channelId,
           priority: label.priority,
         });
+        if (update.status === 'confirmation') {
+          if (update.approvalChannelId)
+            pendingApprovals.push({ action: update.action, approvalChannelId: update.approvalChannelId });
+        } else label.priorityState = 'applied';
       }
-      label.priorityState = 'applied';
     } catch {
       /* Exact policy permits one attempt; unknown changes require staff review. */
     }
@@ -280,11 +286,14 @@ async function classify(
       label.routeTarget = destination.categoryId;
       label.routeState = 'review-required';
       ctx.store.set('support.ai.labels', key(ctx.guild.id, ticketId), label);
-      await applyNative('ticket.category', {
+      const move = await applyNative('ticket.category', {
         channelId: ticket.channelId,
         categoryId: destination.categoryId,
       });
-      label.routeState = 'applied';
+      if (move.status === 'confirmation') {
+        if (move.approvalChannelId)
+          pendingApprovals.push({ action: move.action, approvalChannelId: move.approvalChannelId });
+      } else label.routeState = 'applied';
     } catch {
       /* Unknown/native failures require staff review; never repeat a category mutation automatically. */
     }
@@ -296,6 +305,7 @@ async function classify(
     ...(label.locale ? { locale: label.locale } : {}),
     ...(label.routeState ? { routeState: label.routeState } : {}),
     ...(label.priorityState ? { priorityState: label.priorityState } : {}),
+    ...(pendingApprovals.length ? { pendingApprovals } : {}),
     notice: `${policy.includeContent ? 'Classification uses bounded readable ticket content.' : 'Classification uses the subject only.'} ${label.priorityState === 'applied' ? 'The explicitly approved priority update was applied.' : 'Priority/locale remain advisory metadata.'} ${label.routeState === 'applied' ? 'The manager-approved category mapping was applied.' : label.routeState === 'review-required' ? 'Category routing needs staff review; no automatic retry will occur.' : 'No channel move was requested.'}`,
   };
 }

@@ -1,5 +1,9 @@
 # Explicit warnings and bounded escalation
 
+Automatically classified explicit-content violations use a separate persistent ladder: first warning, then five-, fifteen- and thirty-minute timeouts, followed by a permanent ban on the fifth distinct message. Only current members strictly below the bot's highest role are eligible. This ladder defaults to enabled in automatic moderation policies and does not count manually issued warning cases. See [Automatic moderation](AUTOMATIC_MODERATION.md#progressive-explicit-content-penalties) for deduplication, authority checks, private outcomes and failure handling.
+
+The remainder of this document describes the independent, manually issued warning workflow.
+
 `warning.issue` creates a durable case compatible with existing case notes, owner-visible cases and appeals. It records an explicit warning separately so existing `case.warn` records do not silently trigger automatic sanctions. All writes require the common expiring confirmation. Issuing warnings requires current Moderate Members permission for both requester and bot, plus the ordinary requester/bot role hierarchy checks.
 
 ## Notices
@@ -27,7 +31,7 @@ A manager with Manage Server and Moderate Members can configure:
 }
 ```
 
-Escalation is disabled by default. The policy counts only explicit warnings within the configured window, excluding warnings whose appeals were approved. Its threshold is between two and twenty warnings; the window is between one hour and thirty days. The only automatic sanction is a temporary timeout between one and sixty minutes. The module cannot automatically kick or permanently ban a member.
+Manual-warning escalation is disabled by default. This policy counts only manually issued explicit warnings within the configured window, excluding warnings whose appeals were approved. Its threshold is between two and twenty warnings; the window is between one hour and thirty days. This manual-warning policy can apply only a temporary timeout between one and sixty minutes. It cannot kick or permanently ban a member; the separate automatic explicit-content ladder described above can permanently ban on its fifth eligible violation.
 
 The cooldown is at least the larger of the configured cooldown and timeout duration. Each timeout job has a fixed absolute end time calculated when queued, so retries cannot extend it. An existing longer timeout is preserved. An expired queued sanction is skipped.
 
